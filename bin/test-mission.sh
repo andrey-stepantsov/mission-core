@@ -93,9 +93,10 @@ docker run "${DOCKER_ARGS[@]}" \
     echo '🔍 Checking environment...'
     export PATH=\$PATH:/bin:/usr/bin
     
-    # 1. Setup Git Safety
+    # 1. Setup Git Safety & Disable Hooks
     echo '⚙️  Configuring Git...'
     git config --global --add safe.directory ${HOST_MOCK_REPO}
+    git config --global core.hooksPath /dev/null  # <-- Disables hooks inside container
     $GIT_IGNORE_CMD
     
     # 2. Locate Aider Binary
