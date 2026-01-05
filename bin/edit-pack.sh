@@ -5,6 +5,9 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 MISSION_PACK_ROOT="$(dirname "$SCRIPT_DIR")"
 
+GIT_NAME=$(git config user.name || echo "Mission Developer")
+GIT_EMAIL=$(git config user.email || echo "dev@example.com")
+
 # We still mount the Mock Repo so the Developer can "see" what they are controlling
 HOST_MOCK_REPO="/repos/mock-repo"
 
@@ -31,6 +34,12 @@ DOCKER_ARGS=(
   --entrypoint /bin/bash
   --user "$(id -u):$(id -g)"
   -e HOME=/tmp
+  
+  # --- GIT IDENTITY (Pass Host Credentials) ---
+  -e GIT_AUTHOR_NAME="$GIT_NAME"
+  -e GIT_AUTHOR_EMAIL="$GIT_EMAIL"
+  -e GIT_COMMITTER_NAME="$GIT_NAME"
+  -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"
   
   # --- MOUNTS ---
   # A. The Mission Pack (RW) - This is what we are editing!

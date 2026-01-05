@@ -21,6 +21,9 @@ if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     fi
 fi
 
+GIT_NAME=$(git config user.name || echo "Test User")
+GIT_EMAIL=$(git config user.email || echo "test@example.com")
+
 # Defaults
 : "${VERTEXAI_PROJECT:=gen-lang-client-0140206225}"
 : "${VERTEXAI_LOCATION:=us-central1}"
@@ -46,6 +49,12 @@ DOCKER_ARGS=(
   
   # Redirect Home to /tmp (Since we are stateless)
   -e HOME=/tmp
+
+  # --- GIT IDENTITY (Pass Host Credentials) ---
+  -e GIT_AUTHOR_NAME="$GIT_NAME"
+  -e GIT_AUTHOR_EMAIL="$GIT_EMAIL"
+  -e GIT_COMMITTER_NAME="$GIT_NAME"
+  -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"
   
   # --- MOUNTS ---
   # A. The Mission Pack (The Tool we are testing)
