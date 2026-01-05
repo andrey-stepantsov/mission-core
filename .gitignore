@@ -1,0 +1,30 @@
+# --- Devbox & Nix ---
+.devbox/
+# Note: It is recommended to COMMIT devbox.lock so others get exact versions
+# devbox.lock 
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# --- Aider (Development Logs) ---
+# Ignore chat history when you develop the pack itself
+.aider*
+.chatlogs/
+
+# --- DDD / Build Tools ---
+# If you test ddd inside the mission pack, ignore its artifacts
+.ddd/
+*.log
+*.lock
+compile_commands.json
+
+# --- OS / Editors ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
