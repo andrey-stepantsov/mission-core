@@ -35,6 +35,14 @@ These are low-level build scripts. To handle the complexity of switching between
 
 `ddd-wait` will automatically detect which zone you are in and execute the correct build command in the correct environment.
 
+## The Immutable Build Rule
+
+- **The Gap is Intentional**: You will NOT find `Makefiles` or `CMakeLists.txt` in this repo. This is by design.
+- **Prohibited**: Do NOT create `Makefiles`, CMake scripts, or bash wrappers.
+- **Prohibited**: Do NOT run `gcc`, `g++`, or `make` manually.
+- **Mandatory**: You must trust `ddd-wait` to handle the build, even if you don't see how it works.
+- **Mandatory**: If you are asked to build `app1` or `sdk1`, your ONLY allowed action is to run `ddd-wait`.
+
 ### Examples
 
 To build in the App Zone:
