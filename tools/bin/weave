@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+# Get the directory of this script.
+DIR=$(dirname "$(readlink -f "$0")")
+
+exec "$DIR/../lib/bootstrap.sh" "lib/weave.py" "$@"
