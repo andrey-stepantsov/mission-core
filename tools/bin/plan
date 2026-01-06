@@ -1,0 +1,28 @@
+#!/bin/bash
+set -e
+
+PLAN_DIR="plans"
+SYMLINK_NAME="CURRENT_PLAN.md"
+
+# If no argument is provided, list available plans
+if [ -z "$1" ]; then
+    echo "Usage: $0 <plan_name>"
+    echo "Available plans:"
+    # Find all .md files in plans/, print their basename without extension
+    find "$PLAN_DIR" -name "*.md" -exec basename {} .md \;
+    exit 1
+fi
+
+PLAN_NAME=$1
+TARGET_PLAN="${PLAN_DIR}/${PLAN_NAME}.md"
+
+# Check if the target plan file exists
+if [ ! -f "$TARGET_PLAN" ]; then
+    echo "Error: Plan '$PLAN_NAME' not found at $TARGET_PLAN"
+    exit 1
+fi
+
+# Create/update the symlink. -f to overwrite if it exists.
+ln -sf "$TARGET_PLAN" "$SYMLINK_NAME"
+
+echo "Focus shifted to ${PLAN_NAME}."
