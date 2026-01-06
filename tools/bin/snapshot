@@ -19,7 +19,12 @@ LOG_DIR=$(dirname "$FILENAME")
 mkdir -p "$LOG_DIR"
 
 # Concatenate aider history files into the new log file
-# These files are expected to be in the repository root
-cat .aider.chat.history.md .aider.input.history > "$FILENAME"
+# These files are expected to be in the repository root.
+# Handle cases where one or both files may not exist.
+for f in .aider.chat.history.md .aider.input.history; do
+    if [ -f "$f" ]; then
+        cat "$f" >> "$FILENAME"
+    fi
+done
 
 echo "Created snapshot: ${FILENAME}"

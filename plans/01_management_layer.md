@@ -32,20 +32,20 @@ We are moving away from static configurations to a **Dynamic State Machine**.
 - [x] Create `prompts/system/architect_rules.md` (Drafted).
 - [x] Create `prompts/system/builder_rules.md` (Drafted).
 
-### 🛠️ Step 1: `bin/snapshot` (Telemetry)
+### ✅ Step 1: `tools/bin/snapshot` (Telemetry)
 **Spec:**
 -   **Input:** Optional label string (e.g., "End of Cycle 2").
 -   **Action:** Captures `.aider.chat.history.md` and `.aider.input.history`.
 -   **Output:** `data/logs/{timestamp}_{label}.md`.
 -   **Constraint:** Must handle the case where history files don't exist (fresh session).
 
-### 🛠️ Step 2: `bin/phase` (Identity)
+### 🛠️ Step 2: `tools/bin/phase` (Identity)
 **Spec:**
 -   **Input:** `role` (e.g., `architect`, `builder`).
 -   **Action:** Copies `prompts/system/{role}_rules.md` -> `CONVENTIONS.md`.
 -   **Output:** "Switched to {role} mode. Please notify Aider."
 
-### 🛠️ Step 3: `bin/plan` (Focus)
+### 🛠️ Step 3: `tools/bin/plan` (Focus)
 **Spec:**
 -   **Input:** `plan_name` (filename in `plans/` without extension).
 -   **Action:** Updates `CURRENT_PLAN.md` symlink.
