@@ -39,13 +39,13 @@ We are moving away from static configurations to a **Dynamic State Machine**.
 -   **Output:** `data/logs/{timestamp}_{label}.md`.
 -   **Constraint:** Must handle the case where history files don't exist (fresh session).
 
-### 🛠️ Step 2: `tools/bin/phase` (Identity)
+### ✅ Step 2: `tools/bin/phase` (Identity)
 **Spec:**
 -   **Input:** `role` (e.g., `architect`, `builder`).
 -   **Action:** Copies `prompts/system/{role}_rules.md` -> `CONVENTIONS.md`.
 -   **Output:** "Switched to {role} mode. Please notify Aider."
 
-### 🛠️ Step 3: `tools/bin/plan` (Focus)
+### ✅ Step 3: `tools/bin/plan` (Focus)
 **Spec:**
 -   **Input:** `plan_name` (filename in `plans/` without extension).
 -   **Action:** Updates `CURRENT_PLAN.md` symlink.
