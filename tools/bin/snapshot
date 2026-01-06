@@ -1,0 +1,25 @@
+#!/bin/bash
+set -e
+
+# Get optional label from the first argument
+LABEL=$1
+
+# Create a timestamp
+TIMESTAMP=$(date +%Y%m%d%H%M%S)
+
+# Construct filename. Add label if it's not empty.
+if [ -n "$LABEL" ]; then
+    FILENAME="data/logs/${TIMESTAMP}_${LABEL}.md"
+else
+    FILENAME="data/logs/${TIMESTAMP}.md"
+fi
+
+# Ensure log directory exists
+LOG_DIR=$(dirname "$FILENAME")
+mkdir -p "$LOG_DIR"
+
+# Concatenate aider history files into the new log file
+# These files are expected to be in the repository root
+cat .aider.chat.history.md .aider.input.history > "$FILENAME"
+
+echo "Created snapshot: ${FILENAME}"
