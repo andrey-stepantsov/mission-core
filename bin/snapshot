@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# Create a timestamped filename for the snapshot
+TIMESTAMP=$(date +%Y%m%d%H%M%S)
+FILENAME="snapshot-${TIMESTAMP}.tar.gz"
+
+# Create a tarball of the current git HEAD
+git archive --format=tar.gz --output="${FILENAME}" HEAD
+
+echo "Created snapshot: ${FILENAME}"
