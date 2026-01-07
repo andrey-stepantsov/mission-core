@@ -3,6 +3,8 @@ import sys
 import os
 import datetime
 
+__version__ = '0.1.0'
+
 MEMO_FILE = ".mission/memo.md"
 
 def get_memo_path():
@@ -73,6 +75,7 @@ def cmd_inspect(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Agent Collaboration Tool")
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     # Write
