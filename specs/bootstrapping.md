@@ -6,17 +6,17 @@ Tools must self-manage their dependencies. Users should not need to manually `pi
 
 ## The Architecture
 
-### Entry Point (`bin/<tool>`)
+### Entry Point (`tools/bin/<tool>`)
 
 A lightweight Bash wrapper. It establishes the location of the library and calls the bootstrapper.
 
-### Bootstrapper (`lib/bootstrap.sh`)
+### Bootstrapper (`tools/lib/bootstrap.sh`)
 
 1.  Calculates a unique venv path (e.g., `~/.cache/mission-packs/<hash>`).
 2.  Checks if the venv exists. If not, creates it and installs `requirements.txt`.
 3.  Executes the target Python script using the venv's Python.
 
-### The Logic (`lib/<tool>.py`)
+### The Logic (`tools/lib/<tool>.py`)
 
 The actual Python code. It can now freely import standard libraries (like `PyYAML`).
 

@@ -1,41 +1,39 @@
 # 02. Mission Control Architecture
 
 ## 1. The Vision
-We are moving from a "Toolbox" model (scripts in a drawer) to a "Mission Control" model. The Mission Pack is a live, self-contained environment that "docks" with a project to provide AI-assisted development capabilities (Dashboards, Context Management, Build Tools) without polluting the product source code.
+We are moving from a "Toolbox" model to a "Mission Control" model. The Mission Pack is a live, self-contained environment.
 
 ## 2. The Deployment Pattern: "Hidden Satellite"
-The Mission Pack is deployed as a **Git Submodule** to ensure bi-directional sync (fixes can be pushed back) and version locking.
+The Mission Pack is deployed as a **Git Submodule** in `.mission/`.
 
-* **Project Root:**
-    * `src/`: Product Code (Pure, Zero Dependency on Mission Pack).
-    * `.ddd/`: Domain Definitions (Project-specific rules/context).
-    * `.mission/`: The Mission Pack Submodule (The Engine).
+## 3. Repository Structure (Nested)
+We maintain a clean separation between repository metadata and the toolchain.
 
-## 3. Repository Structure (The Mission Pack)
-The `srl-mission-pack` repository is "flattened" so the root *is* the toolbox.
-
-(Structure omitted for brevity - bin/ lib/ layouts/ containers/)
+* `tools/`: The Engine (Scripts, Libs, Venv).
+* `specs/`: The Blueprints.
+* `plans/`: The Roadmap.
+* `prompts/`: The Persona Definitions.
 
 ## 4. The Workflow
 1.  **Install:** `git submodule add <url> .mission`
-2.  **Launch:** `./.mission/bin/dash`
+2.  **Launch:** `./.mission/tools/bin/dash`
 3.  **Operate:**
-    * **Window 1 (Architect):** High-level design, read-only access to `src/`, full access to `.ddd/`.
-    * **Window 2 (Coder):** Implementation, write access to `src/`.
-    * **Window 3 (Shell):** Execution and testing.
+    * **Window 1 (Architect):** High-level design.
+    * **Window 2 (Coder):** Implementation.
+    * **Window 3 (Shell):** Execution.
 
 ## 5. Implementation Roadmap
 
 ### Phase 1: Foundation (Current)
-- [x] **Refactor:** Flatten repository structure (`tools/` -> root).
-- [x] **Plumbing:** Update `bootstrap.sh` to support self-contained `.venv`.
-- [x] **CLI:** Ensure `bin/weave` works with new paths.
+- [x] **Consolidate:** Ensure all tools live in `tools/`.
+- [x] **Plumbing:** Update `bootstrap.sh` to handle nested structure.
+- [x] **CLI:** Ensure `tools/bin/weave` runs correctly.
 
 ### Phase 2: The Dashboard
-- [ ] **`bin/dash`:** Create the TMUX wrapper script.
+- [ ] **`tools/bin/dash`:** Create the TMUX wrapper script.
 - [ ] **Layouts:** Define standard window splits (Editor + Terminal).
-- [ ] **Personas:** Create `bin/architect` and `bin/coder` wrappers for Aider.
+- [ ] **Personas:** Create `tools/bin/architect` and `tools/bin/coder` wrappers.
 
 ### Phase 3: The Context Pipe
-- [ ] **Handoff:** Create tools to pipe chat history/summary from Architect to Coder.
-- [ ] **Container:** Implement `bin/shell` to run tools inside a hermetic container.
+- [ ] **Handoff:** Create tools to pipe chat history/summary.
+- [ ] **Container:** Implement `tools/bin/shell` (Hermetic).
