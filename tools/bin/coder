@@ -1,0 +1,6 @@
+#!/bin/bash
+echo "---------------------------------------------------"
+echo "💻 [MOCK] CODER PERSONA"
+echo "---------------------------------------------------"
+echo "Status: Standing By..."
+tail -f /dev/null

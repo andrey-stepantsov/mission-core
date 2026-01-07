@@ -1,7 +1,12 @@
 #!/bin/bash
 set -e
 
-# Get the directory of this script.
+# Resolve the directory of this script (tools/bin)
 DIR=$(dirname "$(readlink -f "$0")")
 
-exec "$DIR/../lib/bootstrap.sh" "lib/weave.py" "$@"
+# Calculate absolute paths
+BOOTSTRAP="$DIR/../lib/bootstrap.sh"
+SCRIPT="$DIR/../lib/weave.py"
+
+# Execute
+exec "$BOOTSTRAP" "$SCRIPT" "$@"

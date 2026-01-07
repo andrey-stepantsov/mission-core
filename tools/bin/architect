@@ -1,0 +1,7 @@
+#!/bin/bash
+echo "---------------------------------------------------"
+echo "🤖 [MOCK] ARCHITECT PERSONA"
+echo "---------------------------------------------------"
+echo "Status: Standing By..."
+# Hang silently so the pane stays open for inspection
+tail -f /dev/null
