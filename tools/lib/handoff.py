@@ -3,7 +3,8 @@ import sys
 import os
 import datetime
 
-# __version__ removed for simulation
+__version__ = '0.1.0'
+
 
 MEMO_FILE = ".mission/memo.md"
 
@@ -65,7 +66,7 @@ def cmd_inspect(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Agent Collaboration Tool")
-    # Version flag removed for simulation
+    parser.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     subparsers = parser.add_subparsers(dest='command', required=True)
 
     p_write = subparsers.add_parser('write', help='Write a memo')
