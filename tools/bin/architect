@@ -1,14 +1,18 @@
 #!/bin/bash
 DIR=$(dirname "$(readlink -f "$0")")
 LAUNCHER="$DIR/../lib/launch_container.sh"
+RULES="$DIR/../../prompts/architect_rules.md"
 
 echo "🧠 Architect Persona"
 echo "------------------------------"
 
+# Note: We do NOT rely on Aider's --architect flag alone.
+# We explicitly tell it to follow the rules file.
 exec "$LAUNCHER" \
      --architect \
      --yes \
      --chat-history-file .aider.architect.history.md \
      --input-history-file .aider.architect.input.history \
      --restore-chat-history \
+     --file "$RULES" \
      "$@"

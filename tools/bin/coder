@@ -1,6 +1,7 @@
 #!/bin/bash
 DIR=$(dirname "$(readlink -f "$0")")
 LAUNCHER="$DIR/../lib/launch_container.sh"
+RULES="$DIR/../../prompts/coder_rules.md"
 
 echo "💻 Coder Persona (Dockerized)"
 echo "------------------------------"
@@ -10,4 +11,5 @@ exec "$LAUNCHER" \
      --chat-history-file .aider.coder.history.md \
      --input-history-file .aider.coder.input.history \
      --restore-chat-history \
+     --file "$RULES" \
      "$@"

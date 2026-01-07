@@ -1,0 +1,4 @@
+#!/bin/bash
+# USAGE: tools/bin/review
+# Peeks at the Coder's logs to see what they are doing.
+exec $(dirname "$0")/handoff inspect --target coder --lines 50

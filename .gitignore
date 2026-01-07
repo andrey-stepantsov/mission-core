@@ -29,3 +29,10 @@ compile_commands.json
 .vscode/
 .idea/
 *.swp
+
+# Mission Pack Runtime (Ephemeral)
+memo.md
+.mission/
+.aider.architect.history.md
+.aider.coder.history.md
+.aider.*.input.history
