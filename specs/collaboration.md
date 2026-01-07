@@ -9,28 +9,23 @@ To enable supervision, agents must operate with distinct history files. They mus
 * **Architect:** Uses `.aider.architect.history.md`.
 * **Coder:** Uses `.aider.coder.history.md`.
 
-## 2. The Forward Channel: Instruction (`handoff`)
-The **Architect** directs the **Coder** via "The Memo".
+### Architect -> Coder (Forward)
 
-### Data Structure
-File: `.mission/memo.md`
+The Architect sends instructions to the Coder using the `/run ./dispatch` command.
 
-### CLI Usage
-* **`handoff write "Message" [--file <path>]`**
-    * **User:** Architect.
-    * **Action:** Overwrites the memo with a message and optionally attaches a file (like a plan or spec).
-* **`handoff read`**
-    * **User:** Coder.
-    * **Action:** Prints the current memo. The Coder should run this at the start of a task.
+`/run ./dispatch "Your instructions for the Coder go here."`
 
-## 3. The Backward Channel: Monitoring (`inspect`)
-The **Architect** monitors the **Coder** to detect hallucinations or infinite loops.
+### Coder -> Architect (Backward)
 
-### CLI Usage
-* **`handoff inspect [--lines 50]`**
-    * **User:** Architect.
-    * **Action:** Reads the tail of `.aider.coder.history.md`.
-    * **Goal:** Allow the Architect to "see what the Coder is doing" without intervening.
+The Coder sends a report or results back to the Architect using the `/run ./submit` command.
+
+`/run ./submit "My work is complete. Here is my report."`
+
+### Architect View (Monitor)
+
+The Architect can view a log of all dispatches and submissions using the `/run ./logs` command.
+
+`/run ./logs`
 
 ## 4. The Control Loop: Intervention
 When the Architect detects a failure state in the Coder:
