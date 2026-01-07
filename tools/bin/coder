@@ -6,5 +6,8 @@ echo "💻 Coder Persona (Dockerized)"
 echo "------------------------------"
 
 exec "$LAUNCHER" \
-    --no-auto-commits \
-    "$@"
+     --no-auto-commits \
+     --chat-history-file .aider.coder.history.md \
+     --input-history-file .aider.coder.input.history \
+     --restore-chat-history \
+     "$@"

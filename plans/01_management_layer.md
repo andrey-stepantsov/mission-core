@@ -38,5 +38,5 @@ We maintain a clean separation between repository metadata and the toolchain.
 - [x] **Infrastructure:** Create `tools/bin/apply_patch`.
 - [x] **Mounting:** Fix Split-Brain bootstrapping for hybrid execution.
 - [x] **Integration:** Verify `weave` works inside container.
-- [ ] **Handoff:** Create tools to pipe chat history/summary.
+- [x] **Handoff:** Create `tools/bin/handoff` for Agent-to-Agent communication.
 - [ ] **Container:** Implement `tools/bin/shell` (Hermetic).
