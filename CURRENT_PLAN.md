@@ -16,24 +16,25 @@ We maintain a clean separation between repository metadata and the toolchain.
 
 ## 4. The Workflow
 1.  **Install:** `git submodule add <url> .mission`
-2.  **Launch:** `./.mission/tools/bin/dash`
+2.  **Launch:** `./.mission/dash` (or `./dash`)
 3.  **Operate:**
-    * **Window 1 (Architect):** High-level design.
-    * **Window 2 (Coder):** Implementation.
-    * **Window 3 (Shell):** Execution.
+    * **Left (Architect):** Strategy & Design (Read-Only).
+    * **Center (Coder):** Implementation (Dockerized).
+    * **Right (Ops):** Shell & Monitoring.
 
 ## 5. Implementation Roadmap
 
-### Phase 1: Foundation (Current)
+### Phase 1: Foundation (Complete)
 - [x] **Consolidate:** Ensure all tools live in `tools/`.
 - [x] **Plumbing:** Update `bootstrap.sh` to handle nested structure.
 - [x] **CLI:** Ensure `tools/bin/weave` runs correctly.
 
-### Phase 2: The Dashboard
-- [ ] **`tools/bin/dash`:** Create the TMUX wrapper script.
-- [ ] **Layouts:** Define standard window splits (Editor + Terminal).
-- [ ] **Personas:** Create `tools/bin/architect` and `tools/bin/coder` wrappers.
+### Phase 2: The Dashboard (Complete)
+- [x] **`tools/bin/dash`:** Create the TMUX wrapper script (3-Column Layout).
+- [x] **Layouts:** Implemented "Cockpit" view.
+- [x] **Personas:** Created `architect` and `coder` wrappers for Docker.
 
-### Phase 3: The Context Pipe
+### Phase 3: The Context Pipe (Next)
+- [ ] **Mounting:** Ensure the Docker container can see and execute `tools/bin/weave`.
 - [ ] **Handoff:** Create tools to pipe chat history/summary.
-- [ ] **Container:** Implement `tools/bin/shell` (Hermetic).
+- [ ] **Integration:** Verify Aider can use `weave` to load files.

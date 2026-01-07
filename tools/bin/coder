@@ -1,6 +1,10 @@
 #!/bin/bash
-echo "---------------------------------------------------"
-echo "💻 [MOCK] CODER PERSONA"
-echo "---------------------------------------------------"
-echo "Status: Standing By..."
-tail -f /dev/null
+DIR=$(dirname "$(readlink -f "$0")")
+LAUNCHER="$DIR/../lib/launch_container.sh"
+
+echo "💻 Coder Persona (Dockerized)"
+echo "------------------------------"
+
+exec "$LAUNCHER" \
+    --no-auto-commits \
+    "$@"

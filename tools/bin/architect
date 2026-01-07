@@ -1,7 +1,11 @@
 #!/bin/bash
-echo "---------------------------------------------------"
-echo "🤖 [MOCK] ARCHITECT PERSONA"
-echo "---------------------------------------------------"
-echo "Status: Standing By..."
-# Hang silently so the pane stays open for inspection
-tail -f /dev/null
+DIR=$(dirname "$(readlink -f "$0")")
+LAUNCHER="$DIR/../lib/launch_container.sh"
+
+echo "🧠 Architect Persona"
+echo "------------------------------"
+
+exec "$LAUNCHER" \
+    --architect \
+    --yes \
+    "$@"
