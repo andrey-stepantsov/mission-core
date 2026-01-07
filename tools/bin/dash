@@ -6,45 +6,45 @@ MONITOR_CMD="${MISSION_MONITOR:-/bin/bash}"
 # Cleanup old session for testing
 tmux kill-session -t "$SESSION" 2>/dev/null
 
-echo "🚀 Initializing Mock Cockpit..."
+echo "🚀 Initializing 3-Column Mission Control..."
 
 # 1. Start Session (Pane 0: Will be Architect)
-tmux new-session -d -s "$SESSION" -n "Cockpit"
+tmux new-session -d -s "$SESSION" -n "Mission"
 
-# 2. Split Main Columns (Left vs Right)
-# Target Pane 0. Split Horizontally (-h). Right side gets 65% width.
-# Result: Pane 0 (Left), Pane 1 (Right)
-tmux split-window -t "$SESSION:Cockpit.0" -h -p 65
+# 2. Create Middle Column
+# Split Pane 0 horizontally. We want the new pane (Right side) to take up 66% 
+# of the total width, leaving 33% for the Left side (Architect).
+tmux split-window -h -t "$SESSION:Mission.0" -p 66
 
-# 3. Split Right Column (Coder vs Ops)
-# Target Pane 1 (Right). Split Vertically (-v). Bottom gets 25% height.
-# Result: Pane 1 (Top Right), Pane 2 (Bottom Right)
-tmux split-window -t "$SESSION:Cockpit.1" -v -p 25
+# 3. Create Right Column
+# Target the new Middle Pane (Index 1). Split it horizontally 50/50.
+# Result: Middle becomes 33%, Right becomes 33%.
+# Now we have 3 equal vertical columns.
+tmux split-window -h -t "$SESSION:Mission.1" -p 50
 
-# 4. Split Ops Row (Shell vs Monitor)
-# Target Pane 2 (Bottom Right). Split Horizontally (-h). 
-# Result: Pane 2 (Bottom Right Left), Pane 3 (Bottom Right Right)
-tmux split-window -t "$SESSION:Cockpit.2" -h -p 50
+# 4. Split Right Column (Ops) Vertically
+# Target the new Right Pane (Index 2). Split top/bottom.
+tmux split-window -v -t "$SESSION:Mission.2" -p 50
 
 # --------------------------------------------------------------------------
 # ASSIGN ROLES
 # --------------------------------------------------------------------------
 
-# Pane 0: Architect (Left)
-tmux send-keys -t "$SESSION:Cockpit.0" "clear; $BIN_DIR/architect" C-m
+# Pane 0 (Left): Architect
+tmux send-keys -t "$SESSION:Mission.0" "clear; $BIN_DIR/architect" C-m
 
-# Pane 1: Coder (Top Right - Main Focus)
-tmux send-keys -t "$SESSION:Cockpit.1" "clear; $BIN_DIR/coder" C-m
+# Pane 1 (Middle): Coder
+tmux send-keys -t "$SESSION:Mission.1" "clear; $BIN_DIR/coder" C-m
 
-# Pane 2: Interactive Shell (Bottom Center)
-tmux send-keys -t "$SESSION:Cockpit.2" "echo '--- 🐚 Shell ---'; ls -F" C-m
+# Pane 2 (Right Top): Shell
+tmux send-keys -t "$SESSION:Mission.2" "echo '--- 🐚 Shell ---'; ls -F" C-m
 
-# Pane 3: Monitor (Bottom Right)
-tmux send-keys -t "$SESSION:Cockpit.3" "echo '--- 🔭 Monitor ---'; $MONITOR_CMD" C-m
+# Pane 3 (Right Bottom): Monitor
+tmux send-keys -t "$SESSION:Mission.3" "echo '--- 🔭 Monitor ---'; $MONITOR_CMD" C-m
 
 # --------------------------------------------------------------------------
 # LAUNCH
 # --------------------------------------------------------------------------
-# Focus on the Coder pane (1) by default
-tmux select-pane -t "$SESSION:Cockpit.1"
+# Focus on the Coder (Middle Pane)
+tmux select-pane -t "$SESSION:Mission.1"
 exec tmux attach-session -t "$SESSION"
