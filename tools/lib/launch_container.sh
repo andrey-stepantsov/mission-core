@@ -3,6 +3,9 @@ set -e
 
 # --- 1. Context Resolution ---
 HOST_REPO_ROOT=$(git rev-parse --show-toplevel)
+# Resolve the tools root (Parent of this script's directory)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TOOLS_ROOT=$(dirname "$SCRIPT_DIR")
 
 # --- 2. Credential Discovery ---
 if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
@@ -42,8 +45,12 @@ DOCKER_ARGS=(
     # Mounts
     -v "$HOST_REPO_ROOT:/repo:z"
     -v "$GOOGLE_APPLICATION_CREDENTIALS:/tmp/auth.json:ro,z"
+    # Mount tools to a fixed path for consistent agent access
+    -v "$TOOLS_ROOT:/mission/tools:z"
     
     # Environment
+    # Add Mission Tools to PATH
+    -e PATH="/mission/tools/bin:$PATH"
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
     -e VERTEXAI_LOCATION="${VERTEXAI_LOCATION}"

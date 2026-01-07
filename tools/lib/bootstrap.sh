@@ -7,7 +7,11 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOOLS_ROOT=$(dirname "$SCRIPT_DIR")
 
 # Virtual Environment Location
-VENV_DIR="$TOOLS_ROOT/.venv"
+# We use OS-specific venvs to allow Host and Docker to share this directory
+# without binary format collisions (e.g. Darwin-arm64 vs Linux-x86_64).
+OS_TYPE=$(uname -s)
+ARCH_TYPE=$(uname -m)
+VENV_DIR="$TOOLS_ROOT/.venv-${OS_TYPE}-${ARCH_TYPE}"
 
 # 1. Create Venv if missing
 if [ ! -d "$VENV_DIR" ]; then
