@@ -1,0 +1,11 @@
+#!/bin/bash
+DIR=$(dirname "$(readlink -f "$0")")
+LAUNCHER="$DIR/../lib/launch_container.sh"
+
+# If no arguments are provided, launch an interactive shell.
+if [ $# -eq 0 ]; then
+    exec "$LAUNCHER" bash
+else
+    # Otherwise, execute the requested command inside the container.
+    exec "$LAUNCHER" "$@"
+fi

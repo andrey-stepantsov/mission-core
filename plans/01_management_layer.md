@@ -39,4 +39,4 @@ We maintain a clean separation between repository metadata and the toolchain.
 - [x] **Mounting:** Fix Split-Brain bootstrapping for hybrid execution.
 - [x] **Integration:** Verify `weave` works inside container.
 - [x] **Handoff:** Create `tools/bin/handoff` for Agent-to-Agent communication.
-- [ ] **Container:** Implement `tools/bin/shell` (Hermetic).
+- [x] **Container:** Implement `tools/bin/shell` (Hermetic).
