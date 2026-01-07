@@ -1,0 +1,11 @@
+#!/bin/bash
+# USAGE: logs [lines]
+TARGET=".aider.coder.history.md"
+LINES=${1:-50}
+if [ ! -f "$TARGET" ]; then
+    echo "⚠️  System: No Coder history found yet ($TARGET)."
+    exit 0
+fi
+echo "=== 👁️  CODER CHAT LOG (Last $LINES lines) ==="
+tail -n "$LINES" "$TARGET"
+echo "=============================================="
