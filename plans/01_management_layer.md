@@ -37,6 +37,6 @@ We maintain a clean separation between repository metadata and the toolchain.
 ### Phase 3: The Context Pipe
 - [x] **Infrastructure:** Create `tools/bin/apply_patch`.
 - [x] **Mounting:** Fix Split-Brain bootstrapping for hybrid execution.
-- [ ] **Integration:** Verify `weave` works inside container.
+- [x] **Integration:** Verify `weave` works inside container.
 - [ ] **Handoff:** Create tools to pipe chat history/summary.
 - [ ] **Container:** Implement `tools/bin/shell` (Hermetic).

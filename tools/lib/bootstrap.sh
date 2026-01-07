@@ -11,7 +11,8 @@ TOOLS_ROOT=$(dirname "$SCRIPT_DIR")
 # without binary format collisions (e.g. Darwin-arm64 vs Linux-x86_64).
 OS_TYPE=$(uname -s)
 ARCH_TYPE=$(uname -m)
-VENV_DIR="$TOOLS_ROOT/.venv-${OS_TYPE}-${ARCH_TYPE}"
+RUNTIME=${MISSION_RUNTIME:-host}
+VENV_DIR="$TOOLS_ROOT/.venv-${OS_TYPE}-${ARCH_TYPE}-${RUNTIME}"
 
 # 1. Create Venv if missing
 if [ ! -d "$VENV_DIR" ]; then
@@ -22,7 +23,8 @@ fi
 
 # 2. Install dependencies
 # (Assumes requirements.txt is in tools/)
-"$VENV_DIR/bin/pip" install -r "$TOOLS_ROOT/requirements.txt" > /dev/null 2>&1
+# We silence stdout (logs) but keep stderr (errors) visible.
+"$VENV_DIR/bin/pip" install -r "$TOOLS_ROOT/requirements.txt" > /dev/null
 
 # 3. Export PYTHONPATH
 # This is the Critical Fix: Allow scripts to import sibling modules in lib/

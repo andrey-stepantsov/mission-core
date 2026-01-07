@@ -32,39 +32,49 @@ DOCKER_ARGS=(
     --platform linux/amd64
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
-    
-    # CRITICAL FIX: Set the executable explicitly
-    --entrypoint aider-vertex
-    
+
     # Git Identity
     -e GIT_AUTHOR_NAME="$GIT_NAME"
     -e GIT_AUTHOR_EMAIL="$GIT_EMAIL"
     -e GIT_COMMITTER_NAME="$GIT_NAME"
     -e GIT_COMMITTER_EMAIL="$GIT_EMAIL"
-    
+
     # Mounts
     -v "$HOST_REPO_ROOT:/repo:z"
     -v "$GOOGLE_APPLICATION_CREDENTIALS:/tmp/auth.json:ro,z"
     # Mount tools to a fixed path for consistent agent access
     -v "$TOOLS_ROOT:/mission/tools:z"
-    
+
     # Environment
-    # Add Mission Tools to PATH
-    -e PATH="/mission/tools/bin:$PATH"
+    # NOTE: We do NOT inject PATH here to avoid polluting container with Host paths.
+    -e MISSION_RUNTIME=container
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
     -e VERTEXAI_LOCATION="${VERTEXAI_LOCATION}"
-    
+
     # Working Directory
     -w "/repo"
 )
 
 echo "🐳 Launching Container..."
 
-# --- 5. Execution ---
-# Note: We removed 'aider-vertex' from here because it's now the entrypoint
-exec docker run "${DOCKER_ARGS[@]}" \
-    "$IMAGE" \
-    --model vertex_ai/gemini-2.5-pro \
-    --restore-chat-history \
-    "$@"
+# --- 5. Execution (Bifurcated Logic) ---
+
+# Heuristic: 
+# If the first argument is empty or starts with "-", we assume it's for Aider.
+# Otherwise, we assume it's a command (ls, bash, /path/to/script).
+
+if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
+     # AGENT MODE:
+     # We explicitly set the entrypoint to aider-vertex. 
+     exec docker run --entrypoint aider-vertex "${DOCKER_ARGS[@]}" \
+          "$IMAGE" \
+          --model vertex_ai/gemini-2.5-pro \
+          --restore-chat-history \
+          "$@"
+else
+     # TOOL MODE:
+     # We override the entrypoint to empty ("") to bypass the image's default 
+     # and run the command provided.
+     exec docker run --entrypoint "" "${DOCKER_ARGS[@]}" "$IMAGE" "$@"
+fi
