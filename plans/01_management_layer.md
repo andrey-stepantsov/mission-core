@@ -30,10 +30,13 @@ We maintain a clean separation between repository metadata and the toolchain.
 - [x] **CLI:** Ensure `tools/bin/weave` runs correctly.
 
 ### Phase 2: The Dashboard
-- [ ] **`tools/bin/dash`:** Create the TMUX wrapper script.
-- [ ] **Layouts:** Define standard window splits (Editor + Terminal).
-- [ ] **Personas:** Create `tools/bin/architect` and `tools/bin/coder` wrappers.
+- [x] **`tools/bin/dash`:** Create the TMUX wrapper script.
+- [x] **Layouts:** Define standard window splits (Editor + Terminal).
+- [x] **Personas:** Create `tools/bin/architect` and `tools/bin/coder` wrappers.
 
 ### Phase 3: The Context Pipe
+- [x] **Infrastructure:** Create `tools/bin/apply_patch`.
+- [x] **Mounting:** Fix Split-Brain bootstrapping for hybrid execution.
+- [ ] **Integration:** Verify `weave` works inside container.
 - [ ] **Handoff:** Create tools to pipe chat history/summary.
 - [ ] **Container:** Implement `tools/bin/shell` (Hermetic).
