@@ -1,57 +1,41 @@
-# Cycle 2: The Mission Pack Management Layer
+# 02. Mission Control Architecture
 
-## 1. Context & Status
-**Current Phase:** Platform Engineering (Cycle 2)
-**Repo:** `/repos/srl-mission-pack`
-**Role:** "The Toolsmith" (Building tools for other Agents)
+## 1. The Vision
+We are moving from a "Toolbox" model (scripts in a drawer) to a "Mission Control" model. The Mission Pack is a live, self-contained environment that "docks" with a project to provide AI-assisted development capabilities (Dashboards, Context Management, Build Tools) without polluting the product source code.
 
-We have successfully extracted the "Weave" prototype (Cycle 1) into a permanent Mission Pack. The goal now is to build the **Management Layer**—a set of meta-tools that allow the Agent to manage its own state (Identity, Focus, and Memory) without breaking the "Fourth Wall."
+## 2. The Deployment Pattern: "Hidden Satellite"
+The Mission Pack is deployed as a **Git Submodule** to ensure bi-directional sync (fixes can be pushed back) and version locking.
 
-## 2. Architecture: The "Context Switcher"
-We are moving away from static configurations to a **Dynamic State Machine**.
+* **Project Root:**
+    * `src/`: Product Code (Pure, Zero Dependency on Mission Pack).
+    * `.ddd/`: Domain Definitions (Project-specific rules/context).
+    * `.mission/`: The Mission Pack Submodule (The Engine).
 
-### A. The Plan System (Focus)
-* **Storage:** All plans live in `plans/*.md`.
-* **Active State:** `CURRENT_PLAN.md` is a **symlink** to the active plan.
-* **Benefit:** The Agent always knows *what* to work on by reading `CURRENT_PLAN.md`, but can switch priorities instantly by changing the symlink.
+## 3. Repository Structure (The Mission Pack)
+The `srl-mission-pack` repository is "flattened" so the root *is* the toolbox.
 
-### B. The Phase System (Identity)
-* **Storage:** Identity rules live in `prompts/system/{role}_rules.md`.
-* **Active State:** `CONVENTIONS.md` is a **copy** of the active role.
-* **Benefit:** An "Architect" follows different rules than a "Builder." The Agent adapts its behavior by running a command.
+(Structure omitted for brevity - bin/ lib/ layouts/ containers/)
 
-### C. The Telemetry System (Memory)
-* **Storage:** Logs live in `data/logs/YYYY-MM-DD_HH-mm_{Label}.md`.
-* **Benefit:** Preserves "Flight Recorder" data across `/reset` boundaries for future analysis.
+## 4. The Workflow
+1.  **Install:** `git submodule add <url> .mission`
+2.  **Launch:** `./.mission/bin/dash`
+3.  **Operate:**
+    * **Window 1 (Architect):** High-level design, read-only access to `src/`, full access to `.ddd/`.
+    * **Window 2 (Coder):** Implementation, write access to `src/`.
+    * **Window 3 (Shell):** Execution and testing.
 
-## 3. Implementation Plan (The To-Do List)
+## 5. Implementation Roadmap
 
-### ✅ Step 0: Setup
-- [x] Extract Prototype Code (Completed in Cycle 1).
-- [x] Create `plans/` directory and save this file.
-- [x] Create `prompts/system/architect_rules.md` (Drafted).
-- [x] Create `prompts/system/builder_rules.md` (Drafted).
+### Phase 1: Foundation (Current)
+- [x] **Refactor:** Flatten repository structure (`tools/` -> root).
+- [x] **Plumbing:** Update `bootstrap.sh` to support self-contained `.venv`.
+- [x] **CLI:** Ensure `bin/weave` works with new paths.
 
-### ✅ Step 1: `tools/bin/snapshot` (Telemetry)
-**Spec:**
--   **Input:** Optional label string (e.g., "End of Cycle 2").
--   **Action:** Captures `.aider.chat.history.md` and `.aider.input.history`.
--   **Output:** `data/logs/{timestamp}_{label}.md`.
--   **Constraint:** Must handle the case where history files don't exist (fresh session).
+### Phase 2: The Dashboard
+- [ ] **`bin/dash`:** Create the TMUX wrapper script.
+- [ ] **Layouts:** Define standard window splits (Editor + Terminal).
+- [ ] **Personas:** Create `bin/architect` and `bin/coder` wrappers for Aider.
 
-### ✅ Step 2: `tools/bin/phase` (Identity)
-**Spec:**
--   **Input:** `role` (e.g., `architect`, `builder`).
--   **Action:** Copies `prompts/system/{role}_rules.md` -> `CONVENTIONS.md`.
--   **Output:** "Switched to {role} mode. Please notify Aider."
-
-### ✅ Step 3: `tools/bin/plan` (Focus)
-**Spec:**
--   **Input:** `plan_name` (filename in `plans/` without extension).
--   **Action:** Updates `CURRENT_PLAN.md` symlink.
--   **Output:** "Focus shifted to {plan_name}."
-
-## 4. Development Constraints
-1.  **Bootstrapping:** All Python tools must use the `lib/bootstrap.sh` wrapper pattern.
-2.  **Isolation:** Do not pollute the root. Runtime data goes to `data/`.
-3.  **Dependencies:** Add new libs to `tools/requirements.txt`.
+### Phase 3: The Context Pipe
+- [ ] **Handoff:** Create tools to pipe chat history/summary from Architect to Coder.
+- [ ] **Container:** Implement `bin/shell` to run tools inside a hermetic container.

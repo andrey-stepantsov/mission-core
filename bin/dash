@@ -1,0 +1,28 @@
+#!/bin/bash
+SESSION="mission-control"
+
+# 1. Check if session exists; if so, attach and exit
+tmux has-session -t $SESSION 2>/dev/null
+if [ $? -eq 0 ]; then
+    echo "Attaching to existing mission..."
+    exec tmux attach-session -t $SESSION
+fi
+
+# 2. Create New Session (Detached)
+# Start with the 'Architect' window
+tmux new-session -d -s $SESSION -n "Architect"
+
+# 3. Window 1: Architect (High Level)
+tmux send-keys -t $SESSION:1 "echo 'Activating Architect Persona...'" C-m
+
+# 4. Window 2: Coder (Implementation)
+tmux new-window -t $SESSION -n "Coder"
+tmux send-keys -t $SESSION:2 "echo 'Activating Coder Persona...'" C-m
+
+# 5. Window 3: Terminal (Shell)
+tmux new-window -t $SESSION -n "Shell"
+tmux send-keys -t $SESSION:3 "ls -F" C-m
+
+# 6. Select Architect window and Attach
+tmux select-window -t $SESSION:1
+exec tmux attach-session -t $SESSION
