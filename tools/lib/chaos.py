@@ -18,15 +18,20 @@ def write_file(path, content):
         f.write(content)
 
 def generate_c_source(name, component):
-    """Generates a valid C file with necessary includes."""
     content = [f"// Source: {name}", "#include <stdio.h>"]
     
-    # Include own header if it exists
     base = os.path.splitext(name)[0]
+    # Include own header
     if f"{base}.h" in component.get("headers", []):
         content.append(f'#include "{base}.h"')
     
-    # Add body
+    # Include dependencies headers (naive heuristic for chaos)
+    for inc_path in component.get("includes", []):
+        # If we include a path like ../../lib/math, we assume there is a header there
+        # For the mock, we just add a generic include to prove the path works
+        if "math" in inc_path:
+            content.append('#include "math_ops.h"')
+
     content.append("\n")
     if name == "main.c":
         content.append("int main() {")
@@ -52,7 +57,6 @@ void {os.path.splitext(name)[0]}();
 """
 
 def resolve_path(root_dir, path_str):
-    """Handles absolute paths vs relative paths."""
     if os.path.isabs(path_str):
         return Path(path_str)
     return Path(root_dir) / path_str
@@ -66,64 +70,60 @@ def main():
     with open(plan_file, 'r') as f:
         plan = yaml.safe_load(f)
 
-    # Use current directory by default if root is not specified
     target_root = plan.get("root", ".")
     root_dir = Path(target_root).resolve()
     
     print(f"💥 Initializing Chaos in: {root_dir}")
-    # SAFETY: Removed rmtree(root_dir) to prevent deleting .git/.mission
     if not root_dir.exists():
         root_dir.mkdir(parents=True)
 
-    compile_commands = []
+    root_compile_commands = []
     
     # 1. Process Components
     for comp in plan.get("components", []):
         comp_path = resolve_path(root_dir, comp["path"])
         print(f"   -> Component: {comp['name']} ({comp_path})")
         
-        # Sources
+        # Sources & Headers
         c_files = comp.get("sources", [])
         for src in c_files:
             write_file(comp_path / src, generate_c_source(src, comp))
-            
-        # Headers
         for hdr in comp.get("headers", []):
             write_file(comp_path / hdr, generate_header(hdr))
 
-        # Build Script (lmk)
-        include_flags = []
-        
-        # Local Includes
-        include_flags.append(f"-I{comp_path}")
-        
-        # Relative Includes
+        # Build Flags
+        include_flags = [f"-I{comp_path}"]
         for inc in comp.get("includes", []):
             abs_inc = (comp_path / inc).resolve()
             include_flags.append(f"-I{abs_inc}")
-
-        # External Includes
         for ext in comp.get("external_includes", []):
             include_flags.append(f"-I{ext}")
 
-        # Generate compile_commands entry
+        # Capture Compile Commands
+        local_compile_commands = []
         for src in c_files:
-            # Simple assumption: cc is available
             cmd = f"cc {' '.join(include_flags)} -c {src} -o {src}.o"
-            compile_commands.append({
+            entry = {
                 "directory": str(comp_path),
                 "command": cmd,
                 "file": str(comp_path / src)
-            })
+            }
+            local_compile_commands.append(entry)
+
+        # Decide where to put them
+        db_location = comp.get("compile_db", "root") # Default to root
+        if db_location == "root":
+            root_compile_commands.extend(local_compile_commands)
+        elif db_location == "local":
+            # Write immediately to component dir
+            with open(comp_path / "compile_commands.json", "w") as f:
+                json.dump(local_compile_commands, f, indent=2)
 
         # Generate LMK script
         lmk_content = ["#!/bin/bash", "set -e", "echo '[Chaos Build] Building...'"]
-        
-        # Compile object files
         for src in c_files:
             lmk_content.append(f"cc {' '.join(include_flags)} -c {src} -o {src}.o")
         
-        # Link if executable
         if comp.get("type") == "executable":
             output_bin = comp.get("output", "a.out")
             objs = [f"{s}.o" for s in c_files]
@@ -137,38 +137,28 @@ def main():
         write_file(comp_path / "test/run.sh", "#!/bin/bash\necho 'Test Passed'")
         make_executable(comp_path / "test/run.sh")
 
-    # 2. Generate Global compile_commands.json
-    with open(root_dir / "compile_commands.json", "w") as f:
-        json.dump(compile_commands, f, indent=2)
+    # 2. Write Root compile_commands.json
+    if root_compile_commands:
+        with open(root_dir / "compile_commands.json", "w") as f:
+            json.dump(root_compile_commands, f, indent=2)
 
-    # 3. Generate .ddd/config.json
+    # 3. DDD Config (Default)
     ddd_root = root_dir / ".ddd"
     ensure_dir(ddd_root)
-    
-    ddd_config = plan.get("ddd_config", {})
-    if not ddd_config:
-        # Default config if none provided
-        ddd_config = {
-            "targets": {
-                "all": {
-                    "build": {"cmd": "find . -name lmk -exec {} \\;", "filter": "gcc_make"},
-                    "verify": {"cmd": "echo 'Verify'", "filter": "raw"}
-                }
-            }
-        }
-    
-    with open(ddd_root / "config.json", "w") as f:
-        json.dump(ddd_config, f, indent=2)
+    if not (ddd_root / "config.json").exists():
+        ddd_config = plan.get("ddd_config", {
+            "targets": { "all": { "build": {"cmd": "true"}, "verify": {"cmd": "true"} }}
+        })
+        with open(ddd_root / "config.json", "w") as f:
+            json.dump(ddd_config, f, indent=2)
 
-    # 4. Create .gitignore (Append if exists)
+    # 4. Gitignore
     gitignore_path = root_dir / ".gitignore"
     ignores = ["*.o", "*.out", "compile_commands.json", ".ddd/"]
-    
     current_content = ""
     if gitignore_path.exists():
         with open(gitignore_path, "r") as f:
             current_content = f.read()
-    
     with open(gitignore_path, "a") as f:
         for ig in ignores:
             if ig not in current_content:
