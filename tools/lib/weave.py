@@ -3,6 +3,7 @@ import json
 import sys
 import os
 import yaml
+import glob
 
 def main():
     parser = argparse.ArgumentParser(description="Weave: The Agentic Build Tool")
@@ -43,9 +44,20 @@ def main():
         for view_name in views:
             print(view_name)
     elif args.command == 'get':
-        view_files = views.get(args.view_name)
-        # (Stub for get implementation)
-        print(f"Getting view: {args.view_name}")
+        view_patterns = views.get(args.view_name)
+        if view_patterns is None:
+            print(f"Error: View '{args.view_name}' not found in weave.yaml.", file=sys.stderr)
+            sys.exit(1)
+
+        all_files = set()
+        for pattern in view_patterns:
+            # Use recursive=True to handle patterns like '**/filename.py'
+            for f in glob.glob(pattern, recursive=True):
+                all_files.add(f)
+
+        # Sort for consistent output, then join with spaces
+        sorted_files = sorted(list(all_files))
+        print(" ".join(sorted_files))
 
 if __name__ == "__main__":
     main()
