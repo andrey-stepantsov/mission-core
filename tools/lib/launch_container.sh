@@ -37,7 +37,7 @@ DOCKER_ARGS=(
     -v "$MISSION_ROOT:/mission:z"
     -v "$GOOGLE_APPLICATION_CREDENTIALS:/tmp/auth.json:ro,z"
     -v "$MISSION_ROOT/.global_gitignore:/tmp/global_gitignore:ro,z"
-    -v "/tmp/chaos_sdk:/tmp/chaos_sdk:ro,z"
+    $(./.mission/tools/bin/auto_ghost)
     -e MISSION_RUNTIME=container
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
