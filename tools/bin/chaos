@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+# Resolve the directory of this script
+DIR=$(dirname "$(readlink -f "$0")")
+
+# Calculate absolute paths
+BOOTSTRAP="$DIR/../lib/bootstrap.sh"
+SCRIPT="$DIR/../lib/chaos.py"
+
+# Execute via the bootstrapper
+exec "$BOOTSTRAP" "$SCRIPT" "$@"

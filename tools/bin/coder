@@ -1,7 +1,9 @@
 #!/bin/bash
 DIR=$(dirname "$(readlink -f "$0")")
 LAUNCHER="$DIR/../lib/launch_container.sh"
-RULES="$DIR/../../prompts/coder_rules.md"
+
+# CRITICAL CHANGE: Use the fixed container path
+RULES="/mission/prompts/coder_rules.md"
 
 echo "💻 Coder Persona (Dockerized)"
 echo "------------------------------"

@@ -6,6 +6,8 @@ HOST_REPO_ROOT=$(git rev-parse --show-toplevel)
 # Resolve the tools root (Parent of this script's directory)
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOOLS_ROOT=$(dirname "$SCRIPT_DIR")
+# NEW: Resolve the Mission Root (Parent of tools)
+MISSION_ROOT=$(dirname "$TOOLS_ROOT")
 
 # --- 2. Credential Discovery ---
 if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
@@ -32,6 +34,9 @@ DOCKER_ARGS=(
     --platform linux/amd64
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
+    
+    # CRITICAL FIX: Mac M1 Permission Support
+    --tmpfs /tmp:exec,mode=1777
 
     # Git Identity
     -e GIT_AUTHOR_NAME="$GIT_NAME"
@@ -42,11 +47,11 @@ DOCKER_ARGS=(
     # Mounts
     -v "$HOST_REPO_ROOT:/repo:z"
     -v "$GOOGLE_APPLICATION_CREDENTIALS:/tmp/auth.json:ro,z"
-    # Mount tools to a fixed path for consistent agent access
-    -v "$TOOLS_ROOT:/mission/tools:z"
+    
+    # CRITICAL CHANGE: Mount the ENTIRE mission pack to /mission
+    -v "$MISSION_ROOT:/mission:z"
 
     # Environment
-    # NOTE: We do NOT inject PATH here to avoid polluting container with Host paths.
     -e MISSION_RUNTIME=container
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
@@ -60,13 +65,8 @@ echo "🐳 Launching Container..."
 
 # --- 5. Execution (Bifurcated Logic) ---
 
-# Heuristic: 
-# If the first argument is empty or starts with "-", we assume it's for Aider.
-# Otherwise, we assume it's a command (ls, bash, /path/to/script).
-
 if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
      # AGENT MODE:
-     # We explicitly set the entrypoint to aider-vertex. 
      exec docker run --entrypoint aider-vertex "${DOCKER_ARGS[@]}" \
           "$IMAGE" \
           --model vertex_ai/gemini-2.5-pro \
@@ -74,7 +74,5 @@ if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
           "$@"
 else
      # TOOL MODE:
-     # We override the entrypoint to empty ("") to bypass the image's default 
-     # and run the command provided.
      exec docker run --entrypoint "" "${DOCKER_ARGS[@]}" "$IMAGE" "$@"
 fi
