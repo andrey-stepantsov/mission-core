@@ -8,7 +8,10 @@
 
 ### Configuration
 
-- **File**: `weave.yaml` located at the repository root.
+- **File**: `weave.yaml`. The script searches the following paths in order, using the first one it finds:
+    1.  `.weaves/weave.yaml` (Recommended for user-defined weaves)
+    2.  `.mission/weave.yaml` (For internal, pre-packaged weaves)
+    3.  `weave.yaml` (Legacy location in the project root)
 - **Keys**: The keys in the YAML file are 'views' (e.g., `networking`, `hardware`, `ci`).
 - **Values**: The values are lists of glob patterns that define the files for each view (e.g., `src/net/*.c`).
 
