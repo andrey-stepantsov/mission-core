@@ -1,18 +1,15 @@
 #!/bin/bash
-DIR=$(dirname "$(readlink -f "$0")")
+DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCHER="$DIR/../lib/launch_container.sh"
 
-# CRITICAL CHANGE: Use the fixed container path
-RULES="/mission/prompts/architect_rules.md"
+PROMPTS_DIR="$(cd "$DIR/../../prompts" && pwd)"
+export MISSION_RULES_FILE="$PROMPTS_DIR/architect_rules.md"
 
 echo "🧠 Architect Persona"
-echo "------------------------------"
-
 exec "$LAUNCHER" \
-     --architect \
-     --yes \
-     --chat-history-file .aider.architect.history.md \
-     --input-history-file .aider.architect.input.history \
-     --restore-chat-history \
-     --file "$RULES" \
-     "$@"
+       --architect \
+       --yes \
+       --chat-history-file .aider.architect.history.md \
+       --input-history-file .aider.architect.input.history \
+       --restore-chat-history \
+       "$@"

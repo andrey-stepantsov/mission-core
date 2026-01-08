@@ -1,18 +1,15 @@
 #!/bin/bash
-DIR=$(dirname "$(readlink -f "$0")")
+DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCHER="$DIR/../lib/launch_container.sh"
 
-# CRITICAL CHANGE: Use the fixed container path
-RULES="/mission/prompts/coder_rules.md"
+PROMPTS_DIR="$(cd "$DIR/../../prompts" && pwd)"
+export MISSION_RULES_FILE="$PROMPTS_DIR/coder_rules.md"
 
-echo "💻 Coder Persona (Dockerized)"
-echo "------------------------------"
-
+echo "💻 Coder Persona"
 exec "$LAUNCHER" \
-     --no-auto-lint \
-     --no-auto-commits \
-     --chat-history-file .aider.coder.history.md \
-     --input-history-file .aider.coder.input.history \
-     --restore-chat-history \
-     --file "$RULES" \
-     "$@"
+       --no-auto-lint \
+       --no-auto-commits \
+       --chat-history-file .aider.coder.history.md \
+       --input-history-file .aider.coder.input.history \
+       --restore-chat-history \
+       "$@"

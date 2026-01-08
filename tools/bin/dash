@@ -1,50 +1,25 @@
 #!/bin/bash
 SESSION="mission-control"
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+TOOLS_DIR="$(dirname "$BIN_DIR")"
+MISSION_DIR="$(dirname "$TOOLS_DIR")"
+PROJECT_ROOT="$(dirname "$MISSION_DIR")"
 MONITOR_CMD="${MISSION_MONITOR:-/bin/bash}"
 
-# Cleanup old session for testing
-tmux kill-session -t "$SESSION" 2>/dev/null
+tmux kill-session -t "$SESSION" 2>/dev/null || true
 
-echo "🚀 Initializing 3-Column Mission Control..."
+echo "🚀 Initializing Mission Control..."
+echo "📍 Context: $PROJECT_ROOT"
 
-# 1. Start Session (Pane 0: Will be Architect)
-tmux new-session -d -s "$SESSION" -n "Mission"
+tmux new-session -d -s "$SESSION" -n "Mission" -c "$PROJECT_ROOT"
+tmux split-window -h -t "$SESSION:Mission.0" -p 66 -c "$PROJECT_ROOT"
+tmux split-window -h -t "$SESSION:Mission.1" -p 50 -c "$PROJECT_ROOT"
+tmux split-window -v -t "$SESSION:Mission.2" -p 50 -c "$PROJECT_ROOT"
 
-# 2. Create Middle Column
-# Split Pane 0 horizontally. We want the new pane (Right side) to take up 66% 
-# of the total width, leaving 33% for the Left side (Architect).
-tmux split-window -h -t "$SESSION:Mission.0" -p 66
-
-# 3. Create Right Column
-# Target the new Middle Pane (Index 1). Split it horizontally 50/50.
-# Result: Middle becomes 33%, Right becomes 33%.
-# Now we have 3 equal vertical columns.
-tmux split-window -h -t "$SESSION:Mission.1" -p 50
-
-# 4. Split Right Column (Ops) Vertically
-# Target the new Right Pane (Index 2). Split top/bottom.
-tmux split-window -v -t "$SESSION:Mission.2" -p 50
-
-# --------------------------------------------------------------------------
-# ASSIGN ROLES
-# --------------------------------------------------------------------------
-
-# Pane 0 (Left): Architect
-tmux send-keys -t "$SESSION:Mission.0" "clear; $BIN_DIR/architect" C-m
-
-# Pane 1 (Middle): Coder
-tmux send-keys -t "$SESSION:Mission.1" "clear; $BIN_DIR/coder" C-m
-
-# Pane 2 (Right Top): Shell
+tmux send-keys -t "$SESSION:Mission.0" "clear; '$BIN_DIR/architect'" C-m
+tmux send-keys -t "$SESSION:Mission.1" "clear; '$BIN_DIR/coder'" C-m
 tmux send-keys -t "$SESSION:Mission.2" "echo '--- 🐚 Shell ---'; ls -F" C-m
-
-# Pane 3 (Right Bottom): Monitor
 tmux send-keys -t "$SESSION:Mission.3" "echo '--- 🔭 Monitor ---'; $MONITOR_CMD" C-m
 
-# --------------------------------------------------------------------------
-# LAUNCH
-# --------------------------------------------------------------------------
-# Focus on the Coder (Middle Pane)
 tmux select-pane -t "$SESSION:Mission.1"
 exec tmux attach-session -t "$SESSION"
