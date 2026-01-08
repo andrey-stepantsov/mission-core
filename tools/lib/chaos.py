@@ -5,6 +5,23 @@ import json
 import stat
 from pathlib import Path
 
+# --- Configuration Constants ---
+APP_COMPILER = "/usr/bin/x86_64-linux-gnu-g++-14"
+APP_FLAGS = [
+    "-DGTEST_DONT_DEFINE_FAIL=1", "-DGTEST_HAS_PTHREAD=1",
+    "-fPIC", "-fstack-check", "-fstack-protector-strong",
+    "-O0", "-march=corei7", "-std=c++23", "-Wall", "-Werror",
+    "-D_GNU_SOURCE", "-DASIC_BCM"
+]
+
+DRIVER_COMPILER = "/opt/rh/devtoolset-11/root/usr/bin/gcc"
+DRIVER_FLAGS = [
+    "-DVPRN_DEMO_EN", "-DTPI_NEG_ENABLED", "-std=gnu99",
+    "-g", "-Werror", "-Wall", "-Wextra", "-Wformat=2",
+    "-fno-strict-aliasing", "-fcommon",
+    "-DSW_CHIP_ALL", "-DCFG_ZSDK_LAYER_API"
+]
+
 def make_executable(path):
     st = os.stat(path)
     os.chmod(path, st.st_mode | stat.S_IEXEC)
@@ -17,31 +34,38 @@ def write_file(path, content):
     with open(path, "w") as f:
         f.write(content)
 
-def generate_c_source(name, component):
+def generate_source_content(name, component, style):
+    """Generates C or C++ content based on style."""
+    is_cpp = "cpp" in style
+    
     content = [f"// Source: {name}", "#include <stdio.h>"]
+    if is_cpp:
+        content.append("#include <iostream>")
+        content.append("#include <vector>")
     
     base = os.path.splitext(name)[0]
     # Include own header
     if f"{base}.h" in component.get("headers", []):
         content.append(f'#include "{base}.h"')
     
-    # Include dependencies headers (naive heuristic for chaos)
-    for inc_path in component.get("includes", []):
-        # If we include a path like ../../lib/math, we assume there is a header there
-        # For the mock, we just add a generic include to prove the path works
-        if "math" in inc_path:
-            content.append('#include "math_ops.h"')
-
     content.append("\n")
-    if name == "main.c":
+    
+    # Body
+    if name.startswith("main"):
         content.append("int main() {")
-        content.append('    printf("Chaos App Running\\n");')
+        if is_cpp:
+            content.append('    std::cout << "Chaos App Running" << std::endl;')
+        else:
+            content.append('    printf("Chaos App Running\\n");')
         content.append("    return 0;")
         content.append("}")
     else:
         func_name = base.replace("/", "_")
         content.append(f"void {func_name}() {{")
-        content.append(f'    printf("Function {func_name} called\\n");')
+        if is_cpp:
+             content.append(f'    std::cout << "Function {func_name} called" << std::endl;')
+        else:
+             content.append(f'    printf("Function {func_name} called\\n");')
         content.append("}")
     
     return "\n".join(content)
@@ -79,90 +103,102 @@ def main():
 
     root_compile_commands = []
     
-    # 1. Process Components
     for comp in plan.get("components", []):
         comp_path = resolve_path(root_dir, comp["path"])
         print(f"   -> Component: {comp['name']} ({comp_path})")
+        style = comp.get("style", "driver_c_legacy")
         
-        # Sources & Headers
+        # Sources
         c_files = comp.get("sources", [])
         for src in c_files:
-            write_file(comp_path / src, generate_c_source(src, comp))
+            write_file(comp_path / src, generate_source_content(src, comp, style))
         for hdr in comp.get("headers", []):
             write_file(comp_path / hdr, generate_header(hdr))
 
-        # Build Flags
-        include_flags = [f"-I{comp_path}"]
+        # --- Build Flags Construction ---
+        includes = []
+        includes.append(f"-I{comp_path}") # Local
         for inc in comp.get("includes", []):
             abs_inc = (comp_path / inc).resolve()
-            include_flags.append(f"-I{abs_inc}")
+            includes.append(f"-I{abs_inc}")
         for ext in comp.get("external_includes", []):
-            include_flags.append(f"-I{ext}")
+            includes.append(f"-I{ext}")
 
-        # Capture Compile Commands
         local_compile_commands = []
+        
+        # --- Artifact Generation Logic ---
         for src in c_files:
-            cmd = f"cc {' '.join(include_flags)} -c {src} -o {src}.o"
-            entry = {
-                "directory": str(comp_path),
-                "command": cmd,
-                "file": str(comp_path / src)
-            }
+            out_obj = f"{src}.o"
+            abs_src = str(comp_path / src)
+            abs_out = str(comp_path / out_obj)
+
+            if style == "app_modern_cpp":
+                # FLAVOR 1: 'command' string, C++, App Flags
+                full_flags = APP_FLAGS + includes
+                # Construct the command string
+                cmd_str = f"{APP_COMPILER} {' '.join(full_flags)} -o {out_obj} -c {abs_src}"
+                
+                entry = {
+                    "directory": str(comp_path),
+                    "command": cmd_str,
+                    "file": abs_src,
+                    "output": abs_out
+                }
+            
+            else: 
+                # FLAVOR 2: 'arguments' list, C, Driver Flags
+                # Note: Arguments list usually starts with the compiler
+                args_list = [DRIVER_COMPILER] + DRIVER_FLAGS + includes + ["-c", "-o", out_obj, src]
+                
+                entry = {
+                    "directory": str(comp_path),
+                    "arguments": args_list,
+                    "file": abs_src,
+                    "output": abs_out
+                }
+
             local_compile_commands.append(entry)
 
-        # Decide where to put them
-        db_location = comp.get("compile_db", "root") # Default to root
+        # DB Placement
+        db_location = comp.get("compile_db", "root")
         if db_location == "root":
             root_compile_commands.extend(local_compile_commands)
         elif db_location == "local":
-            # Write immediately to component dir
             with open(comp_path / "compile_commands.json", "w") as f:
                 json.dump(local_compile_commands, f, indent=2)
 
-        # Generate LMK script
-        lmk_content = ["#!/bin/bash", "set -e", "echo '[Chaos Build] Building...'"]
+        # LMK Script (Simple approximation for verifying build flow)
+        # We assume 'cc' is present just to test the script execution logic,
+        # even if the compile_commands point to specific cross-compilers.
+        lmk_content = ["#!/bin/bash", "set -e"]
         for src in c_files:
-            lmk_content.append(f"cc {' '.join(include_flags)} -c {src} -o {src}.o")
+             lmk_content.append(f"echo 'Compiling {src}...'")
+             # Dummy compilation to satisfy "verify" step
+             lmk_content.append(f"touch {src}.o")
         
-        if comp.get("type") == "executable":
-            output_bin = comp.get("output", "a.out")
-            objs = [f"{s}.o" for s in c_files]
-            lmk_content.append(f"cc {' '.join(objs)} -o {output_bin}")
-            lmk_content.append(f"echo '[Chaos Build] Created {output_bin}'")
-
         write_file(comp_path / "lmk", "\n".join(lmk_content))
         make_executable(comp_path / "lmk")
-
-        # Generate Test Stub
+        
+        # Test Stub
         write_file(comp_path / "test/run.sh", "#!/bin/bash\necho 'Test Passed'")
         make_executable(comp_path / "test/run.sh")
 
-    # 2. Write Root compile_commands.json
+    # Write Root DB
     if root_compile_commands:
         with open(root_dir / "compile_commands.json", "w") as f:
             json.dump(root_compile_commands, f, indent=2)
 
-    # 3. DDD Config (Default)
+    # Configs
     ddd_root = root_dir / ".ddd"
     ensure_dir(ddd_root)
     if not (ddd_root / "config.json").exists():
-        ddd_config = plan.get("ddd_config", {
-            "targets": { "all": { "build": {"cmd": "true"}, "verify": {"cmd": "true"} }}
-        })
+        ddd_config = plan.get("ddd_config", {})
         with open(ddd_root / "config.json", "w") as f:
             json.dump(ddd_config, f, indent=2)
-
-    # 4. Gitignore
-    gitignore_path = root_dir / ".gitignore"
-    ignores = ["*.o", "*.out", "compile_commands.json", ".ddd/"]
-    current_content = ""
-    if gitignore_path.exists():
-        with open(gitignore_path, "r") as f:
-            current_content = f.read()
-    with open(gitignore_path, "a") as f:
-        for ig in ignores:
-            if ig not in current_content:
-                f.write(f"\n{ig}")
+            
+    # Gitignore
+    with open(root_dir / ".gitignore", "a") as f:
+        f.write("\n*.o\n*.out\ncompile_commands.json\n.ddd/")
 
     print("✅ Chaos Generated Successfully.")
 
