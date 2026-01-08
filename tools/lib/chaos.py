@@ -16,10 +16,9 @@ APP_FLAGS = [
 
 DRIVER_COMPILER = "/opt/rh/devtoolset-11/root/usr/bin/gcc"
 DRIVER_FLAGS = [
-    "-DVPRN_DEMO_EN", "-DTPI_NEG_ENABLED", "-std=gnu99",
+    "-DDEMO_EN", "-DCACHE_ENABLED", "-std=gnu99",
     "-g", "-Werror", "-Wall", "-Wextra", "-Wformat=2",
-    "-fno-strict-aliasing", "-fcommon",
-    "-DSW_CHIP_ALL", "-DCFG_ZSDK_LAYER_API"
+    "-fno-strict-aliasing", "-fcommon"
 ]
 
 def make_executable(path):
@@ -34,8 +33,13 @@ def write_file(path, content):
     with open(path, "w") as f:
         f.write(content)
 
-def generate_source_content(name, component, style):
-    """Generates C or C++ content based on style."""
+def resolve_path(root_dir, path_str):
+    if os.path.isabs(path_str):
+        return Path(path_str)
+    return Path(root_dir) / path_str
+
+def generate_source_content(name, component, style, header_map, root_dir):
+    """Generates C/C++ content with smart includes."""
     is_cpp = "cpp" in style
     
     content = [f"// Source: {name}", "#include <stdio.h>"]
@@ -44,10 +48,28 @@ def generate_source_content(name, component, style):
         content.append("#include <vector>")
     
     base = os.path.splitext(name)[0]
-    # Include own header
+    
+    # 1. Include own header
     if f"{base}.h" in component.get("headers", []):
         content.append(f'#include "{base}.h"')
+
+    # 2. Include headers from dependencies (Logic Injection)
+    comp_path = resolve_path(root_dir, component["path"])
+    all_include_paths = []
     
+    for inc in component.get("includes", []):
+        all_include_paths.append((comp_path / inc).resolve())
+        
+    for ext in component.get("external_includes", []):
+        all_include_paths.append(resolve_path(root_dir, ext).resolve())
+
+    # Check map
+    for inc_path in all_include_paths:
+        path_str = str(inc_path)
+        if path_str in header_map:
+            for h in header_map[path_str]:
+                content.append(f'#include "{h}"')
+
     content.append("\n")
     
     # Body
@@ -80,11 +102,6 @@ void {os.path.splitext(name)[0]}();
 #endif // {guard}
 """
 
-def resolve_path(root_dir, path_str):
-    if os.path.isabs(path_str):
-        return Path(path_str)
-    return Path(root_dir) / path_str
-
 def main():
     if len(sys.argv) < 2:
         print("Usage: chaos <plan.yaml>")
@@ -101,8 +118,18 @@ def main():
     if not root_dir.exists():
         root_dir.mkdir(parents=True)
 
+    # --- Pass 0: Build Header Map ---
+    # Used to verify if an include path actually contains headers we know about
+    header_map = {}
+    for comp in plan.get("components", []):
+        comp_path = resolve_path(root_dir, comp["path"]).resolve()
+        headers = comp.get("headers", [])
+        if headers:
+            header_map[str(comp_path)] = headers
+
     root_compile_commands = []
     
+    # --- Pass 1: Generate Components ---
     for comp in plan.get("components", []):
         comp_path = resolve_path(root_dir, comp["path"])
         print(f"   -> Component: {comp['name']} ({comp_path})")
@@ -111,7 +138,9 @@ def main():
         # Sources
         c_files = comp.get("sources", [])
         for src in c_files:
-            write_file(comp_path / src, generate_source_content(src, comp, style))
+            content = generate_source_content(src, comp, style, header_map, root_dir)
+            write_file(comp_path / src, content)
+            
         for hdr in comp.get("headers", []):
             write_file(comp_path / hdr, generate_header(hdr))
 
@@ -133,30 +162,22 @@ def main():
             abs_out = str(comp_path / out_obj)
 
             if style == "app_modern_cpp":
-                # FLAVOR 1: 'command' string, C++, App Flags
                 full_flags = APP_FLAGS + includes
-                # Construct the command string
                 cmd_str = f"{APP_COMPILER} {' '.join(full_flags)} -o {out_obj} -c {abs_src}"
-                
                 entry = {
                     "directory": str(comp_path),
                     "command": cmd_str,
                     "file": abs_src,
                     "output": abs_out
                 }
-            
             else: 
-                # FLAVOR 2: 'arguments' list, C, Driver Flags
-                # Note: Arguments list usually starts with the compiler
                 args_list = [DRIVER_COMPILER] + DRIVER_FLAGS + includes + ["-c", "-o", out_obj, src]
-                
                 entry = {
                     "directory": str(comp_path),
                     "arguments": args_list,
                     "file": abs_src,
                     "output": abs_out
                 }
-
             local_compile_commands.append(entry)
 
         # DB Placement
@@ -167,15 +188,11 @@ def main():
             with open(comp_path / "compile_commands.json", "w") as f:
                 json.dump(local_compile_commands, f, indent=2)
 
-        # LMK Script (Simple approximation for verifying build flow)
-        # We assume 'cc' is present just to test the script execution logic,
-        # even if the compile_commands point to specific cross-compilers.
+        # LMK Script
         lmk_content = ["#!/bin/bash", "set -e"]
         for src in c_files:
              lmk_content.append(f"echo 'Compiling {src}...'")
-             # Dummy compilation to satisfy "verify" step
              lmk_content.append(f"touch {src}.o")
-        
         write_file(comp_path / "lmk", "\n".join(lmk_content))
         make_executable(comp_path / "lmk")
         
@@ -196,9 +213,25 @@ def main():
         with open(ddd_root / "config.json", "w") as f:
             json.dump(ddd_config, f, indent=2)
             
-    # Gitignore
-    with open(root_dir / ".gitignore", "a") as f:
-        f.write("\n*.o\n*.out\ncompile_commands.json\n.ddd/")
+    # FIXED: Idempotent Gitignore Update
+    gitignore_path = root_dir / ".gitignore"
+    ignores = ["*.o", "*.out", "compile_commands.json", ".ddd/"]
+    
+    existing_content = ""
+    if gitignore_path.exists():
+        with open(gitignore_path, "r") as f:
+            existing_content = f.read()
+
+    missing_ignores = []
+    for ig in ignores:
+        if ig not in existing_content:
+            missing_ignores.append(ig)
+
+    if missing_ignores:
+        with open(gitignore_path, "a") as f:
+            if existing_content and not existing_content.endswith("\n"):
+                f.write("\n")
+            f.write("\n".join(missing_ignores) + "\n")
 
     print("✅ Chaos Generated Successfully.")
 
