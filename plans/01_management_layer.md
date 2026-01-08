@@ -42,3 +42,7 @@ We maintain a clean separation between repository metadata and the toolchain.
 - [x] **Container:** Implement `tools/bin/shell` (Hermetic).
 
 > **Note:** The "Dispatch/Review Protocol" is now active.
+
+### Phase 4: Context (Verified)
+- [x] **Weave:** Implement `tools/lib/weave.py` to manage context collections.
+- [x] **Directory Pattern:** The system now supports the `.weaves/` directory for organizing context definitions.
