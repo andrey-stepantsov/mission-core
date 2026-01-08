@@ -36,3 +36,5 @@ memo.md
 .aider.architect.history.md
 .aider.coder.history.md
 .aider.*.input.history
+
+data/logs/
