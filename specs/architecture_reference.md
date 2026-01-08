@@ -9,7 +9,7 @@
 ### 1. Mount the Mission
 Run this in your project root to dock the satellite:
 ```bash
-git submodule add https://github.com/your-username/mission-core .mission
+git submodule add https://github.com/andrey-stepantsov/mission-core .mission
 ```
 
 ### 2. Launch
