@@ -27,11 +27,23 @@ def main():
         return
 
     # Load Configuration
-    if not os.path.exists('weave.yaml'):
-        print("Error: weave.yaml not found in the current directory.", file=sys.stderr)
+    config_paths = [
+        '.weaves/weave.yaml',
+        '.mission/weave.yaml',
+        'weave.yaml',
+    ]
+
+    found_config_path = None
+    for path in config_paths:
+        if os.path.exists(path):
+            found_config_path = path
+            break
+
+    if not found_config_path:
+        print(f"Error: Configuration file not found. Searched in: {', '.join(config_paths)}", file=sys.stderr)
         sys.exit(1)
 
-    with open('weave.yaml', 'r') as f:
+    with open(found_config_path, 'r') as f:
         config = yaml.safe_load(f)
 
     if not config or 'views' not in config:
