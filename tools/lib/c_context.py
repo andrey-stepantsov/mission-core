@@ -18,11 +18,6 @@ def normalize_path(path_str, root):
 def is_system_path(path, repo_root):
     """
     Determines if a path is a 'System' path (Noise) vs 'Project' path (Signal).
-    
-    Heuristic:
-    1. If it is inside the Repo Root, it is USER (Signal).
-    2. If it is in standard system locations (/usr, /opt), it is SYSTEM (Noise).
-    3. If it is elsewhere (e.g. /tmp/sdk, ../sibling), treat as USER (Signal).
     """
     try:
         # Check if inside repo
@@ -42,7 +37,6 @@ def is_system_path(path, repo_root):
 def extract_flags(entry):
     """
     Extracts -I, -isystem, and -D flags from a DB entry.
-    Handles both 'command' (string) and 'arguments' (list) formats.
     """
     includes = []
     defines = []
@@ -52,50 +46,34 @@ def extract_flags(entry):
     if "arguments" in entry:
         args = entry["arguments"]
     elif "command" in entry:
-        # Use shlex to split command string correctly handling quotes
         args = shlex.split(entry["command"])
     
-    # Parse args
     i = 0
     while i < len(args):
         arg = args[i]
         
-        # Includes
         if arg.startswith("-I"):
             val = arg[2:]
-            if not val: # Handle "-I path"
-                if i + 1 < len(args):
-                    val = args[i+1]
-                    i += 1
+            if not val and i + 1 < len(args):
+                val = args[i+1]; i += 1
             if val: includes.append(val)
             
         elif arg == "-isystem":
             if i + 1 < len(args):
-                includes.append(args[i+1])
-                i += 1
+                includes.append(args[i+1]); i += 1
                 
-        # Defines
         elif arg.startswith("-D"):
             val = arg[2:]
-            if not val:
-                if i + 1 < len(args):
-                    val = args[i+1]
-                    i += 1
+            if not val and i + 1 < len(args):
+                val = args[i+1]; i += 1
             if val: defines.append(val)
-            
         i += 1
         
     return includes, defines
 
 def scan_includes(file_path):
-    """
-    Scans a file for #include directives.
-    Returns list of tuples: (raw_path, is_system_bracket)
-    """
+    """Scans a file for #include directives."""
     includes = []
-    # Regex for #include "foo" or #include <foo>
-    # Group 1: "foo"
-    # Group 2: <foo>
     regex = re.compile(r'^\s*#\s*include\s+(?:"([^"]+)"|<([^>]+)>)')
     
     try:
@@ -103,26 +81,21 @@ def scan_includes(file_path):
             for line in f:
                 m = regex.match(line)
                 if m:
-                    if m.group(1):
-                        includes.append((m.group(1), False)) # Quote
-                    elif m.group(2):
-                        includes.append((m.group(2), True))  # Bracket
+                    if m.group(1): includes.append((m.group(1), False)) # Quote
+                    elif m.group(2): includes.append((m.group(2), True))  # Bracket
     except Exception as e:
         sys.stderr.write(f"Error reading {file_path}: {e}\n")
         
     return includes
 
 def resolve_header(filename, source_dir, search_paths):
-    """
-    Attempts to find 'filename' in search_paths.
-    Returns (ResolvedPath, FoundBoolean)
-    """
-    # 1. Check relative to source (implicitly first for quotes, sometimes for brackets too depending on compiler)
+    """Attempts to find 'filename' in search_paths."""
+    # 1. Relative to source
     candidate = source_dir / filename
     if candidate.exists():
         return candidate.resolve(), True
         
-    # 2. Check search paths
+    # 2. Search paths
     for path in search_paths:
         candidate = path / filename
         if candidate.exists():
@@ -153,46 +126,64 @@ def main():
         print(json.dumps({"error": f"Failed to parse DB: {e}"}))
         sys.exit(1)
         
-    # 1. Find Entry
+    # --- 1. Robust Entry Lookup (Handle Container/Host Mismatch) ---
     entry = None
-    # normalize DB file paths for comparison
-    target_str = str(target_path)
+    target_rel = target_path.relative_to(root_path) # e.g. drivers/hal/hal.c
+    host_prefix = None
     
     for item in db:
-        # DB paths might be relative or absolute. Resolve them.
-        # Directory field in DB is the working dir for the command
-        work_dir = Path(item["directory"]).resolve()
-        
+        # Resolve DB file path
+        work_dir = Path(item["directory"]) # Keep as Path, but might represent Host path
         file_p = Path(item["file"])
         if not file_p.is_absolute():
-            file_p = (work_dir / file_p).resolve()
-            
-        if str(file_p) == target_str:
+            file_p = (work_dir / file_p)
+
+        # A. Exact Match (Host-on-Host)
+        if str(file_p.resolve()) == str(target_path):
             entry = item
             entry["directory_resolved"] = work_dir
             break
             
+        # B. Relocatable Match (Container-on-Host-DB)
+        # Check if DB path ends with the same relative path (drivers/hal/hal.c)
+        if str(file_p).endswith(str(target_rel)):
+            entry = item
+            entry["directory_resolved"] = work_dir
+            # Calculate Host Prefix for remapping
+            # DB: /repos/chaos/drivers/hal.c | Target: drivers/hal.c
+            # Prefix -> /repos/chaos/
+            match_len = len(str(target_rel))
+            host_prefix = str(file_p)[:-match_len].rstrip(os.sep)
+            break
+            
     if not entry:
-        print(json.dumps({"error": f"File not found in DB: {target_str}"}))
+        print(json.dumps({"error": f"File not found in DB: {target_path}"}))
         sys.exit(1)
         
-    # 2. Extract Flags
+    # --- 2. Extract & Remap Flags ---
     raw_includes, defines = extract_flags(entry)
-    
-    # Resolve include paths to absolute Path objects
     search_paths = []
-    work_dir = entry["directory_resolved"]
+    
+    # We use the DB's working directory, but we might need to remap it too
+    work_dir = Path(entry["directory"])
     
     for inc in raw_includes:
         p = Path(inc)
         if not p.is_absolute():
-            p = (work_dir / p).resolve()
-        if p.exists():
-            search_paths.append(p)
+            p = (work_dir / p) # Resolve against DB's work_dir
+        
+        # REMAP: If we detected a host prefix, swap it for our container root
+        p_str = str(p)
+        if host_prefix and p_str.startswith(host_prefix):
+            # /repos/chaos/drivers -> /repo/drivers
+            p_str = p_str.replace(host_prefix, str(root_path), 1)
+            p = Path(p_str)
             
-    # 3. Scan & Resolve
+        if p.exists():
+            search_paths.append(p.resolve())
+            
+    # --- 3. Scan & Resolve ---
     raw_found = scan_includes(target_path)
-    
     output = {
         "file": str(target_path),
         "defines": defines,
@@ -202,10 +193,8 @@ def main():
     }
     
     source_dir = target_path.parent
-    
     for fname, is_bracket in raw_found:
         resolved, found = resolve_header(fname, source_dir, search_paths)
-        
         if found:
             if is_system_path(resolved, root_path):
                 output["system_includes"].append(str(resolved))
@@ -214,7 +203,7 @@ def main():
         else:
             output["missing"].append(fname)
             
-    # Deduplicate lists
+    # Deduplicate & Print
     output["includes"] = sorted(list(set(output["includes"])))
     output["system_includes"] = sorted(list(set(output["system_includes"])))
     output["missing"] = sorted(list(set(output["missing"])))
