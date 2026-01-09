@@ -5,11 +5,18 @@ LAUNCHER="$DIR/../lib/launch_container.sh"
 PROMPTS_DIR="$(cd "$DIR/../../prompts" && pwd)"
 export MISSION_RULES_FILE="$PROMPTS_DIR/architect_rules.md"
 
-echo "🧠 Architect Persona"
+# Architect uses the same high-reasoning models
+MAIN_MODEL="vertex_ai/gemini-2.5-pro"
+WEAK_MODEL="vertex_ai/gemini-2.5-flash"
+
+echo "📐 Architect Persona"
 exec "$LAUNCHER" \
-       --architect \
-       --yes \
-       --chat-history-file .aider.architect.history.md \
-       --input-history-file .aider.architect.input.history \
-       --restore-chat-history \
-       "$@"
+    --model "$MAIN_MODEL" \
+    --weak-model "$WEAK_MODEL" \
+    --architect \
+    --no-auto-lint \
+    --no-auto-commits \
+    --chat-history-file .aider.architect.history.md \
+    --input-history-file .aider.architect.input.history \
+    --restore-chat-history \
+    "$@"
