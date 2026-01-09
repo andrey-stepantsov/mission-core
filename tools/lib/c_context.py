@@ -2,16 +2,8 @@ import sys
 import os
 import json
 import shlex
-import argparse
 import yaml
 from pathlib import Path
-
-def load_db(db_path):
-    try:
-        with open(db_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return []
 
 def load_config(repo_root):
     config_paths = [
@@ -23,82 +15,117 @@ def load_config(repo_root):
         if path.exists():
             try:
                 with open(path, 'r') as f:
-                    config = yaml.safe_load(f)
-                    return config.get("compilation_dbs", [])
+                    return yaml.safe_load(f) or {}
             except Exception:
                 pass
-    return []
+    return {}
 
-def get_host_prefix(entry_file_abs, target_rel):
+def get_compile_command(fpath, db_paths, required_flags=None):
     """
-    Detects the prefix used in the DB that doesn't exist in the current env.
-    DB: /Users/me/repo/src/main.c
-    Target: src/main.c
-    Result: /Users/me/repo
+    Finds the best matching compile command and generates disambiguation stats.
+    Returns: (best_entry, stats_dict)
     """
-    entry_file_abs = str(Path(entry_file_abs))
-    target_rel = str(Path(target_rel))
-    if entry_file_abs.endswith(target_rel):
-        prefix = entry_file_abs[:-len(target_rel)]
-        if prefix.endswith(os.sep):
-            prefix = prefix[:-1]
-        return prefix
-    return None
-
-def find_entry_and_prefix(db, target_file, repo_root):
-    target_abs = str(Path(target_file).resolve())
-    try:
-        target_rel = str(Path(target_file).resolve().relative_to(repo_root))
-    except ValueError:
-        target_rel = str(Path(target_file))
-
-    for entry in db:
-        entry_file = entry['file']
-        
-        # 1. Exact Match
-        if entry_file == target_abs:
-            return entry, None
-            
-        # 2. Resolved Match
-        try:
-            if str(Path(entry_file).resolve()) == target_abs:
-                return entry, None
-        except OSError:
-            pass
-            
-        # 3. Suffix Match (Host vs Container)
-        if entry_file.endswith(target_rel):
-            prefix = get_host_prefix(entry_file, target_rel)
-            return entry, prefix
-            
-    return None, None
-
-def rebase_path(path_str, host_prefix, repo_root):
-    """
-    If path starts with host_prefix, replace it with repo_root.
-    """
-    if not host_prefix:
-        return Path(path_str)
+    repo_root = Path(os.getcwd())
+    abs_fpath = Path(fpath).resolve()
     
-    path_str = str(Path(path_str))
-    if path_str.startswith(host_prefix):
-        rel_part = path_str[len(host_prefix):]
-        if rel_part.startswith(os.sep):
-            rel_part = rel_part[1:]
-        return (repo_root / rel_part).resolve()
-    return Path(path_str)
+    candidates = []
 
-def extract_includes(entry, repo_root, host_prefix):
+    # 1. Harvest all candidates
+    for db_path in db_paths:
+        if not os.path.exists(db_path):
+            continue
+            
+        try:
+            with open(db_path, 'r') as f:
+                db = json.load(f)
+        except:
+            continue
+
+        for entry in db:
+            entry_file = Path(entry.get("file", "")).resolve()
+            if entry_file == abs_fpath:
+                cmd_str = ""
+                if "command" in entry:
+                    cmd_str = entry["command"]
+                elif "arguments" in entry:
+                    cmd_str = " ".join(entry["arguments"])
+                
+                candidates.append({
+                    "entry": entry,
+                    "cmd_str": cmd_str,
+                    "score": 0
+                })
+
+    total_candidates = len(candidates)
+    stats = {
+        "found": False,
+        "total": total_candidates,
+        "selected": 0,
+        "score": 0,
+        "warnings": []
+    }
+
+    if not candidates:
+        return None, stats
+
+    stats["found"] = True
+
+    # 2. Score Candidates
+    if required_flags:
+        for cand in candidates:
+            score = 0
+            for flag in required_flags:
+                if flag in cand["cmd_str"]:
+                    score += 1
+            cand["score"] = score
+            
+        # Find the max score
+        max_score = max(c["score"] for c in candidates)
+        stats["score"] = max_score
+        
+        # Filter for winners (ties)
+        winners = [c for c in candidates if c["score"] == max_score]
+        
+        # --- GENERATE WARNINGS ---
+        
+        # CASE A: Too Tight (No flags matched)
+        if max_score == 0:
+             stats["warnings"].append(
+                 f"⚠️  TOO TIGHT: Found {total_candidates} entries, but NONE matched your selectors {required_flags}. Defaulting to first entry."
+             )
+        
+        # CASE B: Too Loose (Ambiguous Ties)
+        elif len(winners) > 1:
+             stats["warnings"].append(
+                 f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
+             )
+        
+        # CASE C: Goldilocks (Perfect)
+        elif len(winners) == 1:
+            pass # Perfect match
+            
+        best_match = winners[0]["entry"]
+        stats["selected"] = len(winners)
+        
+    else:
+        # No selectors provided, pick the first one
+        best_match = candidates[0]["entry"]
+        stats["selected"] = total_candidates
+        if total_candidates > 1:
+             stats["warnings"].append(
+                 f"ℹ️  AMBIGUOUS: Found {total_candidates} entries and no selectors defined. Picking the first one."
+             )
+
+    return best_match, stats
+
+def extract_includes(entry, repo_root):
     includes = []
     args = []
-    if 'arguments' in entry:
-        args = entry['arguments']
-    elif 'command' in entry:
-        args = shlex.split(entry['command'])
+    if "arguments" in entry:
+        args = entry["arguments"]
+    elif "command" in entry:
+        args = shlex.split(entry["command"])
     
-    raw_work_dir = entry.get('directory', str(repo_root))
-    work_dir = rebase_path(raw_work_dir, host_prefix, repo_root)
-
     i = 0
     while i < len(args):
         arg = args[i]
@@ -112,90 +139,56 @@ def extract_includes(entry, repo_root, host_prefix):
                 val = args[i+1]
         
         if val:
-            p = Path(val)
-            if not p.is_absolute():
-                resolved = (work_dir / p).resolve()
-            else:
-                # Absolute path in DB. Check if it needs re-homing.
-                resolved = rebase_path(str(p), host_prefix, repo_root)
-            includes.append(str(resolved))
+            work_dir = Path(entry.get("directory", repo_root))
+            full_path = (work_dir / val).resolve()
+            includes.append(str(full_path))
         i += 1
-    
-    includes.insert(0, str(work_dir))
+        
     return includes
 
-def scan_file_headers(file_path):
-    headers = []
-    try:
-        with open(file_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("#include"):
-                    parts = line.split()
-                    if len(parts) > 1:
-                        h = parts[1].strip('"<>')
-                        headers.append(h)
-    except Exception:
-        pass
-    return headers
-
-def resolve_headers(headers, include_dirs):
-    resolved = []
-    missing = []
-    for h in headers:
-        found = False
-        for d in include_dirs:
-            p = Path(d) / h
-            if p.exists():
-                resolved.append(str(p))
-                found = True
-                break
-        if not found:
-            missing.append(h)
-    return resolved, missing
-
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("file", help="Source file to analyze")
-    parser.add_argument("--db", default="compile_commands.json", help="Default DB")
-    parser.add_argument("--root", default=".", help="Project root")
-    args = parser.parse_args()
-    
-    repo_root = Path(args.root).resolve()
-    db_paths = [Path(args.db)]
-    
-    extra_dbs = load_config(repo_root)
-    for db_str in extra_dbs:
-        db_paths.append(repo_root / db_str)
-        
-    entry = None
-    host_prefix = None
-    
-    # Try finding the file in all known DBs
-    for db_path in db_paths:
-        if db_path.exists():
-            db = load_db(db_path)
-            found_entry, found_prefix = find_entry_and_prefix(db, args.file, repo_root)
-            if found_entry:
-                entry = found_entry
-                host_prefix = found_prefix
-                break
-    
-    if not entry:
-        # Fallback: empty result
-        print(json.dumps({"file": str(Path(args.file).resolve()), "includes": [], "missing": []}))
-        return
+    if len(sys.argv) < 2:
+        print("Usage: c_context.py <file> [--db <path>]")
+        sys.exit(1)
 
-    include_dirs = extract_includes(entry, repo_root, host_prefix)
-    raw_headers = scan_file_headers(args.file)
-    found, missing = resolve_headers(raw_headers, include_dirs)
+    target_file = sys.argv[1]
+    repo_root = os.getcwd()
+    config = load_config(repo_root)
     
-    result = {
-        "file": str(Path(args.file).resolve()),
-        "includes": found,
-        "missing": missing
-    }
-    print(json.dumps(result, indent=2))
+    db_paths = []
+    if "--db" in sys.argv:
+        db_paths = [sys.argv[sys.argv.index("--db") + 1]]
+    else:
+        db_paths = ["compile_commands.json", "build/compile_commands.json"]
+        if "compilation_dbs" in config:
+            db_paths.extend(config["compilation_dbs"])
+
+    required_flags = []
+    if "context_selector" in config:
+        required_flags = config["context_selector"].get("required_flags", [])
+
+    entry, stats = get_compile_command(target_file, db_paths, required_flags)
+    
+    # Print warnings to Stderr so the user sees them in logs
+    for w in stats["warnings"]:
+        print(w, file=sys.stderr)
+
+    if entry:
+        includes = extract_includes(entry, repo_root)
+        print(json.dumps({
+            "file": target_file,
+            "found": True,
+            "includes": includes,
+            "selected_command": entry.get("command", "")[:100] + "...",
+            "stats": stats 
+        }, indent=2))
+    else:
+        print(json.dumps({
+            "file": target_file,
+            "found": False,
+            "includes": [],
+            "stats": stats
+        }, indent=2))
 
 if __name__ == "__main__":
     main()
