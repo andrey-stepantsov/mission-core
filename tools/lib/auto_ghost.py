@@ -6,7 +6,7 @@ import yaml
 from pathlib import Path
 
 def get_external_paths(db_path, repo_root):
-    external_paths = set()
+    mount_pairs = set()
     repo_root = Path(repo_root).resolve()
     
     try:
@@ -35,19 +35,42 @@ def get_external_paths(db_path, repo_root):
                     val = args[i+1]
             
             if val:
-                p = Path(val)
-                if not p.is_absolute():
+                path_obj = Path(val)
+                # 1. Resolve Logical Path (What the DB says)
+                if not path_obj.is_absolute():
                     work_dir = Path(entry.get("directory", repo_root))
-                    p = (work_dir / p).resolve()
+                    logical_path = (work_dir / path_obj)
                 else:
-                    p = p.resolve()
+                    logical_path = path_obj
+
+                logical_str = os.path.normpath(str(logical_path))
+
+                # 2. Resolve Physical Path (Where the file actually is)
                 try:
-                    p.relative_to(repo_root)
-                except ValueError:
-                    if p.exists():
-                        external_paths.add(p)
+                    physical_path = Path(logical_str).resolve()
+                    physical_str = str(physical_path)
+                    
+                    # Check if external to repo
+                    try:
+                        physical_path.relative_to(repo_root)
+                        # It is inside repo -> Ignore
+                    except ValueError:
+                        # It is external -> Mount it
+                        if physical_path.exists():
+                            # Mount 1: Physical -> Physical (Robustness)
+                            mount_pairs.add((physical_str, physical_str))
+                            
+                            # Mount 2: Physical -> Logical (DB Compatibility)
+                            # If the DB points to a symlink (e.g. /var/...) but the file 
+                            # is really at /private/var/..., we need to mount the physical
+                            # file to the logical location so the compiler finds it.
+                            if physical_str != logical_str:
+                                mount_pairs.add((physical_str, logical_str))
+                except OSError:
+                    pass
             i += 1
-    return external_paths
+            
+    return mount_pairs
 
 def load_config(repo_root):
     config_paths = [
@@ -75,14 +98,17 @@ def main():
     for db_str in extra_dbs:
         db_paths.add((Path(repo_root) / db_str).resolve())
     
-    found_paths = set()
+    all_mounts = set()
     for db in db_paths:
         if db.exists():
-            found_paths.update(get_external_paths(db, repo_root))
+            all_mounts.update(get_external_paths(db, repo_root))
 
     flags = []
-    for p in sorted(list(found_paths)):
-        flags.append(f'-v {p}:{p}:ro,z')
+    # Generate Docker flags: -v HOST:CONTAINER:ro,z
+    # We sort by container path to have deterministic output
+    for host_p, container_p in sorted(list(all_mounts), key=lambda x: x[1]):
+        flags.append(f'-v {host_p}:{container_p}:ro,z')
+        
     if flags:
         print(" ".join(flags))
 

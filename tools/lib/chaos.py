@@ -61,7 +61,9 @@ def generate_source_content(name, component, style, header_map, root_dir):
         all_include_paths.append((comp_path / inc).resolve())
         
     for ext in component.get("external_includes", []):
-        all_include_paths.append(resolve_path(root_dir, ext).resolve())
+        # Resolve external includes to absolute paths for consistency
+        abs_ext = resolve_path(root_dir, ext).resolve()
+        all_include_paths.append(abs_ext)
 
     # Check map
     for inc_path in all_include_paths:
@@ -150,8 +152,11 @@ def main():
         for inc in comp.get("includes", []):
             abs_inc = (comp_path / inc).resolve()
             includes.append(f"-I{abs_inc}")
+        
+        # FIX: Force absolute paths for external includes
         for ext in comp.get("external_includes", []):
-            includes.append(f"-I{ext}")
+            abs_ext = resolve_path(root_dir, ext).resolve()
+            includes.append(f"-I{abs_ext}")
 
         local_compile_commands = []
         

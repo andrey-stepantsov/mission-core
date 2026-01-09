@@ -23,9 +23,22 @@ IMAGE="ghcr.io/andrey-stepantsov/aider-vertex:v1.2.1"
 GIT_NAME=$(git config user.name || echo "Mission Developer")
 GIT_EMAIL=$(git config user.email || echo "dev@mission.core")
 
+# --- AUTO-GHOST ---
+echo "🔍 Scanning for external dependencies (Auto-Ghost)..."
+GHOST_MOUNTS=$("$TOOLS_ROOT/bin/auto_ghost")
+
+if [ -n "$GHOST_MOUNTS" ]; then
+    echo "   Ghost Mounts: $GHOST_MOUNTS"
+else
+    echo "   Ghost Mounts: None"
+fi
+
+# --- SYNC IGNORE ---
+# Ensure global ignore is synced before mount
+"$TOOLS_ROOT/bin/sync_ignore" 2>/dev/null || true
+
 DOCKER_ARGS=(
     -it --rm
-    --platform linux/amd64
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
     --tmpfs /tmp:exec,mode=1777
@@ -37,7 +50,7 @@ DOCKER_ARGS=(
     -v "$MISSION_ROOT:/mission:z"
     -v "$GOOGLE_APPLICATION_CREDENTIALS:/tmp/auth.json:ro,z"
     -v "$MISSION_ROOT/.global_gitignore:/tmp/global_gitignore:ro,z"
-    $(./.mission/tools/bin/auto_ghost)
+    $GHOST_MOUNTS
     -e MISSION_RUNTIME=container
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
@@ -57,28 +70,13 @@ git config --global user.name "$GIT_NAME"
 git config --global user.email "$GIT_EMAIL"
 git config --global core.excludesfile /tmp/global_gitignore
 
-# --- FIX: EXPOSE LOCAL TOOLS ---
-# Add the mission pack's bin directory to PATH so local scripts (like the real 'weave') work.
 export PATH="/mission/tools/bin:\$PATH"
-
-# Check if 'weave' is found now
-if ! command -v weave &> /dev/null; then
-    # Fallback check: Is it installed as 'ctx-tool'?
-    if command -v ctx-tool &> /dev/null; then
-        echo "⚠️  'weave' not found, but 'ctx-tool' detected. Aliasing..." >&2
-        mkdir -p /tmp/bin
-        ln -sf \$(which ctx-tool) /tmp/bin/weave
-        export PATH="/tmp/bin:\$PATH"
-    fi
-fi
-
 exec aider-vertex "\$@"
 INNER_EOF
 )
 
 if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
       AIDER_ARGS=("--model" "vertex_ai/gemini-2.5-pro" "--restore-chat-history")
-      
       if [ -n "$MISSION_RULES_FILE" ]; then
           AIDER_ARGS+=("--read" "/etc/mission_rules.md")
       fi

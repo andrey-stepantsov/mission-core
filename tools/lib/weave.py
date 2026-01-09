@@ -37,7 +37,6 @@ def expand_c_context(file_list, repo_root):
     c_context_bin = script_dir.parent / "bin" / "c_context"
     
     if not c_context_bin.exists():
-        # Fallback if running purely from lib
         print(f"Warning: c_context binary not found at {c_context_bin}", file=sys.stderr)
         return file_list
 
@@ -85,11 +84,10 @@ def expand_c_context(file_list, repo_root):
                     p = Path(inc).relative_to(repo_root)
                     expanded_files.add(str(p))
                 except ValueError:
-                    # External path (e.g. /tmp/chaos_sdk), keep absolute
+                    # External path (e.g. ../tmp_chaos/sdk), keep absolute
                     expanded_files.add(inc)
 
         except subprocess.CalledProcessError:
-            # If c_context fails (e.g. file not in DB), just ignore silently
             pass
         except json.JSONDecodeError:
             pass
@@ -111,6 +109,7 @@ def main():
     # 'get' command
     parser_get = subparsers.add_parser('get', help='Get all files for a specific view.')
     parser_get.add_argument('view_name', help='The name of the view to get.')
+    parser_get.add_argument('--expand', action='store_true', help='Expand context using C-Context analysis.')
 
     args = parser.parse_args()
 
@@ -161,8 +160,10 @@ def main():
                 initial_files.add(f)
 
         # 2. Expand Context (C/C++ Awareness)
-        repo_root = os.getcwd()
-        final_files = expand_c_context(list(initial_files), repo_root)
+        final_files = sorted(list(initial_files))
+        if args.expand:
+            repo_root = os.getcwd()
+            final_files = expand_c_context(final_files, repo_root)
 
         # 3. Output
         print(" ".join(final_files))
