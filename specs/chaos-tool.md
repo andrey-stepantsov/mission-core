@@ -2,7 +2,7 @@
 
 ## Synopsis
 
-The **Chaos Generator** (`tools/bin/chaos`) is a testing utility designed to create "Perfectly Broken" C/C++ repositories. It generates complex, fractured build environments to test how context tools (`ctx-tool`, `weave`) handle edge cases like Out-of-Tree headers, conflicting compilation databases, and sibling dependencies.
+The **Chaos Generator** (`tools/bin/chaos`) is a testing utility designed to create "Perfectly Broken" C/C++ repositories. It generates complex, fractured build environments to test how context tools (`c_context`, `weave`) handle edge cases like Out-of-Tree headers, conflicting compilation databases, and sibling dependencies.
 
 ## Usage
 
@@ -71,3 +71,11 @@ Support for absolute paths allows you to generate components outside the reposit
 ### 4. Hermetic & Safe
 * **Hermetic:** Runs entirely within the Mission Pack's Python environment.
 * **Safe:** Does **not** recursively delete the target directory. It safely overwrites files and appends to `.gitignore` idempotently.
+
+## The "Safe Ground" Strategy
+
+To verify tool logic on systems with restrictive Docker file sharing permissions (e.g., macOS, Windows) without fighting OS-level protections for `/tmp`:
+
+1.  **Internalize Externals:** We configure the Chaos Plan to generate "External" SDKs inside the repo (e.g., `external/sdk`).
+2.  **Simulate Distance:** We treat these folders as "System Libraries" in the `compile_commands.json` (using `-isystem` or absolute paths) to trick the tools into thinking they are remote.
+3.  **Verify Resolution:** If `weave` can resolve these "internal-external" files, the logic is sound (Path Resolution, DB Parsing). Only then do we attempt true cross-mounts.
