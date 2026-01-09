@@ -36,7 +36,6 @@ def get_external_paths(db_path, repo_root):
             
             if val:
                 path_obj = Path(val)
-                # 1. Resolve Logical Path (What the DB says)
                 if not path_obj.is_absolute():
                     work_dir = Path(entry.get("directory", repo_root))
                     logical_path = (work_dir / path_obj)
@@ -45,25 +44,15 @@ def get_external_paths(db_path, repo_root):
 
                 logical_str = os.path.normpath(str(logical_path))
 
-                # 2. Resolve Physical Path (Where the file actually is)
                 try:
                     physical_path = Path(logical_str).resolve()
                     physical_str = str(physical_path)
                     
-                    # Check if external to repo
                     try:
                         physical_path.relative_to(repo_root)
-                        # It is inside repo -> Ignore
                     except ValueError:
-                        # It is external -> Mount it
                         if physical_path.exists():
-                            # Mount 1: Physical -> Physical (Robustness)
                             mount_pairs.add((physical_str, physical_str))
-                            
-                            # Mount 2: Physical -> Logical (DB Compatibility)
-                            # If the DB points to a symlink (e.g. /var/...) but the file 
-                            # is really at /private/var/..., we need to mount the physical
-                            # file to the logical location so the compiler finds it.
                             if physical_str != logical_str:
                                 mount_pairs.add((physical_str, logical_str))
                 except OSError:
@@ -88,6 +77,36 @@ def load_config(repo_root):
                 pass
     return []
 
+def optimize_mounts(mounts):
+    """
+    Removes redundant child mounts.
+    If '/a/b' is mounted, we don't need '/a/b/c'.
+    """
+    # Sort by length so we process parents before children
+    sorted_mounts = sorted(list(mounts), key=lambda x: x[0])
+    final_mounts = []
+
+    for host_p, container_p in sorted_mounts:
+        # Check if this path is already covered by an existing parent mount
+        covered = False
+        for parent_h, parent_c in final_mounts:
+            # We only consolidate if BOTH host and container paths match the nesting
+            # (To avoid complex mapping edge cases)
+            try:
+                # Check if host path is inside parent host path
+                Path(host_p).relative_to(Path(parent_h))
+                # Check if container path is inside parent container path
+                Path(container_p).relative_to(Path(parent_c))
+                covered = True
+                break
+            except ValueError:
+                continue
+        
+        if not covered:
+            final_mounts.append((host_p, container_p))
+            
+    return final_mounts
+
 def main():
     repo_root = os.getcwd()
     db_paths = {
@@ -103,11 +122,13 @@ def main():
         if db.exists():
             all_mounts.update(get_external_paths(db, repo_root))
 
+    # OPTIMIZATION STEP
+    optimized = optimize_mounts(all_mounts)
+
     flags = []
-    # Generate Docker flags: -v HOST:CONTAINER:ro,z
-    # We sort by container path to have deterministic output
-    for host_p, container_p in sorted(list(all_mounts), key=lambda x: x[1]):
-        flags.append(f'-v {host_p}:{container_p}:ro,z')
+    for host_p, container_p in optimized:
+        # CHANGED: Removed 'z' flag to avoid SELinux issues on NFS (/auto)
+        flags.append(f'-v {host_p}:{container_p}:ro')
         
     if flags:
         print(" ".join(flags))
