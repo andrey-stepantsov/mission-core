@@ -1,19 +1,19 @@
-# Mission Core (v0.2.0)
+# Mission Core (v1.3.1)
 
-**Mission Core** is a portable, containerized "AI Developer Environment" that docks into any C/C++/Python repository. It provides a pre-configured suite of AI agents ("Personas") equipped with deep context awareness tools.
+**Mission Core** is a portable, containerized "AI Developer Environment" that docks into any C/C++/Python repository. It provides a pre-configured suite of AI agents ("Personas") equipped with deep context awareness and build-system integration.
 
-## 🚀 New in v0.2.0: The Context Engine
+## 🚀 New in v1.3.1: The Context Engine
 
-This release introduces **"Context X-Ray"** and **"Ghost Mounting"**, solving the "Hermetic Blindness" problem where containerized AI agents cannot see external dependencies.
+This release completes the "Context Engine," a toolset designed for massive monorepos and embedded development.
 
 ### Key Capabilities
 
 | Feature | Description |
 | :--- | :--- |
-| **Context X-Ray** | `weave` now automatically scans C/C++ files for `#include` directives and resolves them to physical paths using `compile_commands.json`. |
-| **Ghost Mounting** | The launcher dynamically detects out-of-tree dependencies (e.g., `/opt/sdk`, `/tmp/lib`) and mounts them into the container at runtime. |
-| **Split-Brain Fix** | Automatically remaps Host paths (e.g., `/repos/project`) to Container paths (`/repo`) so the AI can use host-generated compilation databases. |
-| **Multi-DB Support** | Support for monorepos with multiple scattered `compile_commands.json` files. |
+| **Nuclear Strategy** | `sync_ignore` allows you to **ignore everything (`*`)** by default and whitelist only your active task. Essential for 1M+ LOC repos. |
+| **Target Selector** | `weave` now resolves ambiguous compilation targets (e.g., ARM vs x86) by filtering for specific flags in `compile_commands.json`. |
+| **Auto-Ghost** | The launcher dynamically detects external dependencies (e.g., `/auto/swtools`) and mounts them via NFS-safe, read-only volumes. |
+| **Parasitic Mode** | The AI runs in a container but drives the **Host Build System** via the "Dead Drop Daemon" (`.ddd`), enabling verification without moving toolchains. |
 
 ---
 
@@ -23,49 +23,49 @@ This release introduces **"Context X-Ray"** and **"Ghost Mounting"**, solving th
 Mount the mission pack as a submodule in your project root:
 
 ```bash
-git submodule add https://github.com/andrey-stepantsov/mission-core .mission
+git submodule add [https://github.com/andrey-stepantsov/mission-core](https://github.com/andrey-stepantsov/mission-core) .mission
 ```
 
-### 2. Launch
-Start the dashboard (requires `tmux`):
+### 2. Configuration (`weave.yaml`)
+Create a `weave.yaml` in your root to define your context logic.
 
-```bash
-./.mission/dash
+```yaml
+# 1. Sources: Where to find compile commands
+compilation_dbs:
+  - "compile_commands.json"
+
+# 2. Selectors: Resolve ambiguity (e.g., Pick the ASIC V3 build)
+context_selector:
+  required_flags: ["-D_TARGET_ASIC_V3"]
+
+# 3. Nuclear Strategy: Ignore everything, whitelist the HAL
+ignores: ["*"]
+views:
+  hal: ["drivers/hal/**"]
 ```
 
-Or launch the **Coder** persona directly:
+### 3. Launch
+Start the **Coder** persona. The system will automatically sync ignores and mount external paths.
 
 ```bash
 ./.mission/coder
 ```
 
-### 3. The "Weave" Workflow
-Inside the container, use `weave` to pull context. The AI will automatically receive all necessary headers, even if they are located outside the repository.
-
-```text
-/run weave get hal
-# Output: drivers/hal/hal.c drivers/hal/hal.h /tmp/chaos_sdk/sdk_defs.h
-```
-
 ---
 
-## ⚙️ Configuration (`weave.yaml`)
+## 🧠 Advanced Workflows
 
-By default, the system looks for `compile_commands.json` in the project root and `build/`. If your project has multiple databases (e.g., one for the app, one for drivers), list them in `.weaves/weave.yaml`:
+### The Context Engine
+For a deep dive on handling ambiguous targets and defining Nuclear exclusion rules, see the guide:
+👉 **[Context Engine Documentation](docs/context_engine.md)**
 
-```yaml
-compilation_dbs:
-  - "compile_commands.json"        # Host App
-  - "drivers/hal/compile_commands.json" # Embedded Driver
+### Parasitic Mode (Build & Verify)
+To let the AI run builds on your host machine (without moving your compiler into Docker):
+1.  Run `dd-daemon` on your host.
+2.  Configure `.ddd/config.json`.
+3.  The AI will use the "Doctor" hooks to verify its own code.
 
-views:
-  hal:
-    - "drivers/hal/*.c"
-  core:
-    - "app/core/*.cpp"
-```
-
-**Auto-Ghost** will scan *all* listed databases to ensure every external dependency is mounted into the container.
+👉 **[Parasitic Mode Documentation](PARASITIC_MODE.md)**
 
 ---
 
@@ -75,28 +75,27 @@ views:
 Standard containers blind the AI to external SDKs. Mission Core solves this by scanning the host before launch:
 
 1.  **Scan:** `auto_ghost.py` reads all `compilation_dbs`.
-2.  **Detect:** Finds absolute paths like `-I/opt/sdk/include`.
-3.  **Inject:** Generates `-v /opt/sdk/include:/opt/sdk/include:ro` flags for Docker.
-4.  **Result:** The AI sees the file at the exact same path as the compiler.
+2.  **Filter:** Removes redundant child paths and disables SELinux relabeling (`:z`) for NFS safety.
+3.  **Inject:** Generates `-v /opt/sdk:/opt/sdk:ro` flags for Docker.
 
-### The "C-Context" Tool
-`tools/bin/c_context` is the bridge between the build system and the AI.
+### The "C-Context" Disambiguator
+`c_context.py` acts as a smart filter for compilation databases.
 
 ```bash
 # Usage
-c_context target_file.c --db compile_commands.json --root .
+c_context driver.c --db compile_commands.json
 ```
 
-**Output:**
+**Output (Ambiguity Resolution):**
 ```json
 {
-  "file": "/repo/src/main.c",
-  "defines": ["_GNU_SOURCE", "DEBUG"],
-  "includes": [
-    "/repo/src/main.h",
-    "/opt/sdk/include/defs.h" 
-  ],
-  "system_includes": [],
-  "missing": []
+  "file": "driver.c",
+  "found": true,
+  "selected_command": "gcc -c driver.c -D_TARGET_ASIC_V3 ...",
+  "stats": {
+    "total": 5,
+    "selected": 1,
+    "warnings": []
+  }
 }
 ```
