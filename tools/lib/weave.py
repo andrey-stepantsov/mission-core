@@ -51,7 +51,7 @@ def generate_context_card(macros, repo_root):
         
     return str(card_path.relative_to(repo_root))
 
-def expand_c_context(file_list, repo_root):
+def expand_c_context(file_list, repo_root, manual_macros=None):
     script_dir = Path(__file__).parent.resolve()
     c_context_bin = script_dir.parent / "bin" / "c_context"
     
@@ -62,6 +62,11 @@ def expand_c_context(file_list, repo_root):
     expanded_files = set(file_list)
     processed_files = set()
     collected_macros = set()
+    
+    # 0. Inject Manual Macros
+    if manual_macros:
+        for m in manual_macros:
+            collected_macros.add(m)
 
     for file_path in list(expanded_files):
         if file_path in processed_files: continue
@@ -103,7 +108,6 @@ def expand_c_context(file_list, repo_root):
     card = generate_context_card(collected_macros, repo_root)
     if card:
         expanded_files.add(card)
-        # --- NEW: User Awareness Message ---
         print(f"🛡️  Context Card Generated: {card} ({len(collected_macros)} macros active)", file=sys.stderr)
 
     return sorted(list(expanded_files))
@@ -153,11 +157,17 @@ def main():
         for pattern in view_patterns:
             for f in glob.glob(pattern, recursive=True):
                 initial_files.add(f)
+        
+        # --- NEW: Extract Extra Defines ---
+        extra_defines = []
+        if "context_selector" in config:
+            extra_defines = config["context_selector"].get("extra_defines", [])
 
         final_files = sorted(list(initial_files))
         if args.expand:
             repo_root = os.getcwd()
-            final_files = expand_c_context(final_files, repo_root)
+            # Pass manual macros to the expander
+            final_files = expand_c_context(final_files, repo_root, manual_macros=extra_defines)
 
         print(" ".join(final_files))
 
