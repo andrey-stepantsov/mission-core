@@ -114,3 +114,28 @@ views:
     - "src/feature/**"
     - "include/feature/**"
 ```
+
+---
+
+## 6. Adaptive Navigation (New!)
+
+To prevent "Lost in the Woods" syndrome, the Context Engine provides a **Relational Map** tool. It allows the AI to query the dependency graph of the code (Callers, Callees, Definitions) without reading every file.
+
+### Usage
+```bash
+# Who calls this function?
+weave map callers HAL_Init
+
+# Where is this defined?
+weave map defs struct_Device_Config
+```
+
+### Adaptive Architecture
+The tool uses a "Tiered" strategy to ensure it works in any environment:
+
+| Tier | Engine | Accuracy | Requirement |
+| :--- | :--- | :--- | :--- |
+| **1. Premium** | `clang-query` | 100% (AST-based) | Valid `compile_commands.json` |
+| **2. Fallback** | `git grep` | Good (Text-based) | Git repository |
+
+* **Automatic:** The tool automatically detects if `clang-query` is available (e.g., inside the `aider-vertex` container) and upgrades itself. If running on a host without tools, it degrades gracefully to Grep.
