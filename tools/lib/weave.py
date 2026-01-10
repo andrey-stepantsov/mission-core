@@ -25,7 +25,7 @@ def generate_context_card(macros, repo_root):
     card_path = gen_dir / "active_context.md"
     
     content = [
-        "# 🛡️ Active Build Configuration",
+        "# 🛡️ Active Build Context",
         "",
         "The following Preprocessor Definitions are ACTIVE for the current view.",
         "Use this information to interpret `#ifdef` blocks.",
@@ -103,6 +103,8 @@ def expand_c_context(file_list, repo_root):
     card = generate_context_card(collected_macros, repo_root)
     if card:
         expanded_files.add(card)
+        # --- NEW: User Awareness Message ---
+        print(f"🛡️  Context Card Generated: {card} ({len(collected_macros)} macros active)", file=sys.stderr)
 
     return sorted(list(expanded_files))
 
