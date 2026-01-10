@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+DIR=$(dirname "$(readlink -f "$0")")
+BOOTSTRAP="$DIR/../lib/bootstrap.sh"
+SCRIPT="$DIR/../lib/map.py"
+exec "$BOOTSTRAP" "$SCRIPT" "$@"
