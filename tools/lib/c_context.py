@@ -3,6 +3,7 @@ import os
 import json
 import shlex
 import yaml
+import re
 from pathlib import Path
 
 def load_config(repo_root):
@@ -20,11 +21,23 @@ def load_config(repo_root):
                 pass
     return {}
 
+def extract_macros(cmd_str):
+    """Extracts -D definitions from a command string."""
+    macros = []
+    # Simple tokenization to handle quoted strings safely
+    try:
+        args = shlex.split(cmd_str)
+        for arg in args:
+            if arg.startswith("-D"):
+                macros.append(arg[2:])
+            elif arg.startswith("-U"):
+                macros.append(f"!{arg[2:]}") # Mark undefs
+    except Exception:
+        # Fallback regex if shlex fails on complex make lines
+        macros = re.findall(r'-D([a-zA-Z0-9_=\(\)]+)', cmd_str)
+    return sorted(list(set(macros)))
+
 def get_compile_command(fpath, db_paths, required_flags=None):
-    """
-    Finds the best matching compile command and generates disambiguation stats.
-    Returns: (best_entry, stats_dict)
-    """
     repo_root = Path(os.getcwd())
     abs_fpath = Path(fpath).resolve()
     
@@ -79,37 +92,25 @@ def get_compile_command(fpath, db_paths, required_flags=None):
                     score += 1
             cand["score"] = score
             
-        # Find the max score
         max_score = max(c["score"] for c in candidates)
         stats["score"] = max_score
         
-        # Filter for winners (ties)
         winners = [c for c in candidates if c["score"] == max_score]
         
-        # --- GENERATE WARNINGS ---
-        
-        # CASE A: Too Tight (No flags matched)
         if max_score == 0:
              stats["warnings"].append(
                  f"⚠️  TOO TIGHT: Found {total_candidates} entries, but NONE matched your selectors {required_flags}. Defaulting to first entry."
              )
-        
-        # CASE B: Too Loose (Ambiguous Ties)
         elif len(winners) > 1:
              stats["warnings"].append(
                  f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
              )
-        
-        # CASE C: Goldilocks (Perfect)
-        elif len(winners) == 1:
-            pass # Perfect match
             
-        best_match = winners[0]["entry"]
+        best_match = winners[0]
         stats["selected"] = len(winners)
         
     else:
-        # No selectors provided, pick the first one
-        best_match = candidates[0]["entry"]
+        best_match = candidates[0]
         stats["selected"] = total_candidates
         if total_candidates > 1:
              stats["warnings"].append(
@@ -167,19 +168,23 @@ def main():
     if "context_selector" in config:
         required_flags = config["context_selector"].get("required_flags", [])
 
-    entry, stats = get_compile_command(target_file, db_paths, required_flags)
+    match, stats = get_compile_command(target_file, db_paths, required_flags)
     
-    # Print warnings to Stderr so the user sees them in logs
     for w in stats["warnings"]:
         print(w, file=sys.stderr)
 
-    if entry:
+    if match:
+        entry = match["entry"]
+        cmd_str = match["cmd_str"]
         includes = extract_includes(entry, repo_root)
+        macros = extract_macros(cmd_str)
+        
         print(json.dumps({
             "file": target_file,
             "found": True,
             "includes": includes,
-            "selected_command": entry.get("command", "")[:100] + "...",
+            "macros": macros,
+            "selected_command": cmd_str[:100] + "...",
             "stats": stats 
         }, indent=2))
     else:
@@ -187,6 +192,7 @@ def main():
             "file": target_file,
             "found": False,
             "includes": [],
+            "macros": [],
             "stats": stats
         }, indent=2))
 
