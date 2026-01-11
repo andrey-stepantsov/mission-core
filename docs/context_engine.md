@@ -139,3 +139,10 @@ The tool uses a "Tiered" strategy to ensure it works in any environment:
 | **2. Fallback** | `git grep` | Good (Text-based) | Git repository |
 
 * **Automatic:** The tool automatically detects if `clang-query` is available (e.g., inside the `aider-vertex` container) and upgrades itself. If running on a host without tools, it degrades gracefully to Grep.
+
+### Technical Note: Context Awareness
+While `weave get` (The Reader) strictly respects your `weave.yaml` context selectors (e.g., `ASIC_V3`), the `weave map` tool operates on the **raw** `compile_commands.json`.
+
+* **Ambiguity:** If your compilation database contains multiple entries for the same file (e.g., x86 and ARM), the Map tool typically uses the **first entry found**.
+* **Implication:** You might see dependency paths that exist in the Host build but not the Target build.
+* **Workaround:** If exact precision is required, ensure your `compile_commands.json` is generated for a single specific target.
