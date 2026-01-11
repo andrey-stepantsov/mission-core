@@ -16,9 +16,17 @@ tmux split-window -h -t "$SESSION:Mission.0" -p 66 -c "$PROJECT_ROOT"
 tmux split-window -h -t "$SESSION:Mission.1" -p 50 -c "$PROJECT_ROOT"
 tmux split-window -v -t "$SESSION:Mission.2" -p 50 -c "$PROJECT_ROOT"
 
+# Pane 0: Architect (Agent)
 tmux send-keys -t "$SESSION:Mission.0" "clear; '$BIN_DIR/architect'" C-m
+
+# Pane 1: Coder (Agent)
 tmux send-keys -t "$SESSION:Mission.1" "clear; '$BIN_DIR/coder'" C-m
-tmux send-keys -t "$SESSION:Mission.2" "echo '--- 🐚 Shell ---'; ls -F" C-m
+
+# Pane 2: Shell (Human/Container)
+# CHANGED: Now launches the hermetic shell instead of just echoing
+tmux send-keys -t "$SESSION:Mission.2" "clear; '$BIN_DIR/shell'" C-m
+
+# Pane 3: Monitor (Host/Logs)
 tmux send-keys -t "$SESSION:Mission.3" "echo '--- 🔭 Monitor ---'; $MONITOR_CMD" C-m
 
 tmux select-pane -t "$SESSION:Mission.1"
