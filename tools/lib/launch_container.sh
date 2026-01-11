@@ -24,21 +24,33 @@ GIT_NAME=$(git config user.name || echo "Mission Developer")
 GIT_EMAIL=$(git config user.email || echo "dev@mission.core")
 
 # --- AUTO-GHOST ---
-echo "🔍 Scanning for external dependencies (Auto-Ghost)..."
+# Only print if we are in a TTY to avoid polluting pipe output
+if [ -t 0 ]; then
+    echo "🔍 Scanning for external dependencies (Auto-Ghost)..."
+fi
 GHOST_MOUNTS=$("$TOOLS_ROOT/bin/auto_ghost")
 
-if [ -n "$GHOST_MOUNTS" ]; then
-    echo "   Ghost Mounts: $GHOST_MOUNTS"
-else
-    echo "   Ghost Mounts: None"
+if [ -t 0 ]; then
+    if [ -n "$GHOST_MOUNTS" ]; then
+        echo "   Ghost Mounts: $GHOST_MOUNTS"
+    else
+        echo "   Ghost Mounts: None"
+    fi
 fi
 
 # --- SYNC IGNORE ---
-# Ensure global ignore is synced before mount
 "$TOOLS_ROOT/bin/sync_ignore" 2>/dev/null || true
 
+# --- TTY DETECTION ---
+# Only request a TTY (-t) if input is actually a terminal.
+# Always keep -i (interactive) to allow piping stdin.
+TTY_FLAG=""
+if [ -t 0 ]; then
+    TTY_FLAG="-t"
+fi
+
 DOCKER_ARGS=(
-    -it --rm
+    -i $TTY_FLAG --rm
     --user "$(id -u):$(id -g)"
     -e HOME=/tmp
     --tmpfs /tmp:exec,mode=1777
@@ -62,7 +74,9 @@ if [ -n "$MISSION_RULES_FILE" ]; then
     DOCKER_ARGS+=(-v "$MISSION_RULES_FILE:/etc/mission_rules.md:ro,z")
 fi
 
-echo "🐳 Launching Container ($IMAGE)..."
+if [ -t 0 ]; then
+    echo "🐳 Launching Container ($IMAGE)..."
+fi
 
 PREFLIGHT_SCRIPT=$(cat <<INNER_EOF
 set -e
@@ -76,6 +90,7 @@ INNER_EOF
 )
 
 if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
+      # AIDER MODE
       AIDER_ARGS=("--model" "vertex_ai/gemini-2.5-pro" "--restore-chat-history")
       if [ -n "$MISSION_RULES_FILE" ]; then
           AIDER_ARGS+=("--read" "/etc/mission_rules.md")
@@ -85,5 +100,6 @@ if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
       exec docker run --entrypoint /bin/bash "${DOCKER_ARGS[@]}" \
            "$IMAGE" -c "$PREFLIGHT_SCRIPT" -- "${AIDER_ARGS[@]}"
 else
+      # SHELL/EXEC MODE
       exec docker run --entrypoint "" "${DOCKER_ARGS[@]}" "$IMAGE" "$@"
 fi

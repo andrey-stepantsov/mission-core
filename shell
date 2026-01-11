@@ -1,2 +1,4 @@
 #!/bin/bash
-exec ./tools/bin/shell "$@"
+# Wrapper to launch the container shell from anywhere
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/tools/bin/shell" "$@"
