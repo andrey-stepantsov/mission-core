@@ -128,6 +128,9 @@ weave map callers HAL_Init
 
 # Where is this defined?
 weave map defs struct_Device_Config
+
+# 💡 Human Mode (Get /read command):
+weave map callers HAL_Init -H
 ```
 
 ### Adaptive Architecture
@@ -146,3 +149,8 @@ While `weave get` (The Reader) strictly respects your `weave.yaml` context selec
 * **Ambiguity:** If your compilation database contains multiple entries for the same file (e.g., x86 and ARM), the Map tool typically uses the **first entry found**.
 * **Implication:** You might see dependency paths that exist in the Host build but not the Target build.
 * **Workaround:** If exact precision is required, ensure your `compile_commands.json` is generated for a single specific target.
+
+
+### Usage
+This is WEAVE, Version 4.5 (TeX Live 2025)
+This is WEAVE, Version 4.5 (TeX Live 2025)
