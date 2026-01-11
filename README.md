@@ -99,3 +99,11 @@ c_context driver.c --db compile_commands.json
   }
 }
 ```
+
+---
+
+## 📚 Documentation
+
+* **[Operator Manual](docs/operator_manual.md):** The user guide for Dash, Shell, and Weave.
+* **[Context Engine](docs/context_engine.md):** Deep dive into Monorepo strategy and Auto-Ghosting.
+* **[Parasitic Mode](docs/parasitic_mode.md):** Running AI on Host Build Systems.
