@@ -1,7 +1,7 @@
 #!/bin/bash
 # Host Shim: Auto-Bootstraps the Build Environment
 
-# [FIX] Resolve physical location of this script (handles symlinks)
+# 1. Resolve physical location (Self-Aware Logic)
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
   DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
@@ -10,27 +10,17 @@ while [ -h "$SOURCE" ]; do
 done
 BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-# Paths relative to the REAL binary location
+# 2. Locate the Real Launcher
 MISSION_ROOT="$(dirname "$BIN_DIR")"
-DDD_DIR="$MISSION_ROOT/tools/ddd"
-BOOTSTRAP="$DDD_DIR/bootstrap.sh"
-VENV="$DDD_DIR/.venv"
-TARGET="$DDD_DIR/bin/dd-daemon"
+TARGET="$MISSION_ROOT/tools/ddd/bin/dd-daemon"
 
-# Validation & Bootstrap
-if [ ! -d "$DDD_DIR" ]; then
-    echo "❌ Error: DDD toolchain not found in $DDD_DIR"
+# 3. Validation
+if [ ! -f "$TARGET" ]; then
+    echo "❌ Error: DDD toolchain broken. Target missing:"
+    echo "   $TARGET"
     exit 1
 fi
 
-if [ ! -d "$VENV" ]; then
-    echo "⚡️ [DDD] Initializing Build Environment..."
-    if [ -f "$BOOTSTRAP" ]; then
-        bash "$BOOTSTRAP"
-    else
-        echo "❌ Error: bootstrap.sh missing."
-        exit 1
-    fi
-fi
-
+# 4. Handover
+# Delegate bootstrapping completely to the inner launcher.
 exec "$TARGET" "$@"
