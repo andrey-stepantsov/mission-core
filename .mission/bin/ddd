@@ -1,0 +1,14 @@
+#!/bin/bash
+# Client Shim: Triggers the build
+# Context: .mission/bin/
+
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MISSION_ROOT="$(dirname "$BIN_DIR")"
+TARGET="$MISSION_ROOT/tools/ddd/bin/ddd-wait"
+
+if [ ! -f "$TARGET" ]; then
+    echo "❌ Error: DDD client not found at $TARGET"
+    exit 1
+fi
+
+exec "$TARGET" "$@"
