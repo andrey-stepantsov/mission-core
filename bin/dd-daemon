@@ -1,0 +1,18 @@
+#!/bin/bash
+# Host Shim: Auto-Bootstraps the Build Environment
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MISSION_ROOT="$(dirname "$BIN_DIR")"
+DDD_DIR="$MISSION_ROOT/tools/ddd"
+BOOTSTRAP="$DDD_DIR/bootstrap.sh"
+VENV="$DDD_DIR/.venv"
+TARGET="$DDD_DIR/bin/dd-daemon"
+
+if [ ! -d "$DDD_DIR" ]; then
+    echo "❌ Error: DDD toolchain not found in $DDD_DIR"
+    exit 1
+fi
+if [ ! -d "$VENV" ]; then
+    echo "⚡️ [DDD] Initializing Build Environment..."
+    if [ -f "$BOOTSTRAP" ]; then bash "$BOOTSTRAP"; fi
+fi
+exec "$TARGET" "$@"

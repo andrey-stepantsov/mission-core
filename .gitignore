@@ -38,3 +38,6 @@ memo.md
 .aider.*.input.history
 
 data/logs/
+
+# Whitelist bin scripts
+!/bin/
