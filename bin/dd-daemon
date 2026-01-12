@@ -1,18 +1,24 @@
 #!/bin/bash
-# Host Shim: Auto-Bootstraps the Build Environment
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MISSION_ROOT="$(dirname "$BIN_DIR")"
-DDD_DIR="$MISSION_ROOT/tools/ddd"
-BOOTSTRAP="$DDD_DIR/bootstrap.sh"
-VENV="$DDD_DIR/.venv"
-TARGET="$DDD_DIR/bin/dd-daemon"
+# Shim to the internal DDD daemon
+# Fixes bug where previous version invoked bootstrap without args (triggering interactive shell)
 
-if [ ! -d "$DDD_DIR" ]; then
-    echo "❌ Error: DDD toolchain not found in $DDD_DIR"
+# Resolve physical directory of this script (Symlink safe)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+# Calculate target: ../tools/ddd/bin/dd-daemon
+TARGET="$BIN_DIR/../tools/ddd/bin/dd-daemon"
+
+if [ ! -f "$TARGET" ]; then
+    echo "❌ Error: DDD daemon not found at $TARGET"
+    echo "   Ensure tools/ddd submodule is populated (git submodule update --init --recursive)"
     exit 1
 fi
-if [ ! -d "$VENV" ]; then
-    echo "⚡️ [DDD] Initializing Build Environment..."
-    if [ -f "$BOOTSTRAP" ]; then bash "$BOOTSTRAP"; fi
-fi
+
+# Delegate execution completely
 exec "$TARGET" "$@"
