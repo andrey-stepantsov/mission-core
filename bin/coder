@@ -1,2 +1,21 @@
 #!/bin/bash
-exec "$(dirname "$0")/tools/bin/coder" "$@"
+# Shim to ../tools/bin/coder
+
+# Resolve physical directory of this script (Symlink safe)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
+# Calculate target: ../tools/bin/coder
+TARGET="$BIN_DIR/../tools/bin/coder"
+
+if [ ! -f "$TARGET" ]; then
+    echo "❌ Error: Target tool not found at $TARGET"
+    exit 1
+fi
+
+exec "$TARGET" "$@"
