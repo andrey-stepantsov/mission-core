@@ -1,0 +1,3 @@
+[submodule "tools/ddd"]
+	path = tools/ddd
+	url = https://github.com/andrey-stepantsov/ddd
