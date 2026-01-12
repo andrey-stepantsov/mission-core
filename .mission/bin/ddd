@@ -1,8 +1,15 @@
 #!/bin/bash
 # Client Shim: Triggers the build
-# Context: .mission/bin/
 
-BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# [FIX] Resolve physical location
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+
 MISSION_ROOT="$(dirname "$BIN_DIR")"
 TARGET="$MISSION_ROOT/tools/ddd/bin/ddd-wait"
 
