@@ -1,11 +1,20 @@
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCHER="$DIR/../lib/launch_container.sh"
-
 PROMPTS_DIR="$(cd "$DIR/../../prompts" && pwd)"
-export MISSION_RULES_FILE="$PROMPTS_DIR/architect_rules.md"
 
-# Architect uses the same high-reasoning models
+# --- NEW: Cartridge Detection Logic ---
+REPO_ROOT="$(cd "$DIR/../../../" && pwd)"
+PROJECT_RULES="$REPO_ROOT/.mission-context/leader_rules.md"
+
+if [ -f "$PROJECT_RULES" ]; then
+    echo "🎯 [Cartridge] Loading mission prompts from: .mission-context/leader_rules.md"
+    export MISSION_RULES_FILE="$PROJECT_RULES"
+else
+    echo "🏠 [Default] No cartridge found. Using system prompts."
+    export MISSION_RULES_FILE="$PROMPTS_DIR/architect_rules.md"
+fi
+
 MAIN_MODEL="vertex_ai/gemini-2.5-pro"
 WEAK_MODEL="vertex_ai/gemini-2.5-flash"
 
