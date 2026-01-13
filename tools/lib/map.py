@@ -78,20 +78,39 @@ def query_clang(mode, symbol, root):
         return parse_clang_output(raw)
     return None
 
-# --- TIER 2: Git Grep ---
+# --- TIER 2: Grep / Ripgrep (UPGRADED) ---
 def query_grep(mode, symbol, root):
+    import shutil
     hits = set()
-    print(f"⚠️ [Grep] Fallback search for '{symbol}'...", file=sys.stderr)
-    cmd = []
+    
+    # 1. Detect Tool (rg > git grep)
+    RG = shutil.which("rg")
+    tool_bin = RG if RG else "git"
+    
+    print(f"⚠️ [{tool_bin}] Fallback search for '{symbol}'...", file=sys.stderr)
+
+    # 2. Build Regex
+    pattern = ""
     if mode == "callers":
-        cmd = ["git", "grep", "-n", f"{symbol}("]
-    elif mode == "callees":
-        print("  [i] 'callees' not supported in grep mode.", file=sys.stderr)
-        return []
+        pattern = f"\\b{symbol}\\b"
     elif mode == "defs":
-        cmd = ["git", "grep", "-n", f"^{symbol}("] 
-        
-    if not cmd: return []
+        # Regex Breakdown:
+        # #define\s+{symbol}\b          -> Macros
+        # | \b{symbol}\s*\(              -> Functions
+        # | \}\s*{symbol}\s*;            -> Compact Typedefs: "} my_type;"
+        # | ^\s*{symbol}\s*;             -> Dangling Typedefs: "    my_type;" (NEW)
+        # | typedef\s+.*\b{symbol}\s*;   -> Simple Typedefs
+        # | (struct|enum|union)\s+{symbol}\s*\{  -> Tag Defs
+        pattern = f"(#define\\s+{symbol}\\b|\\b{symbol}\\s*\\(|\\}}\\s*{symbol}\\s*;|^\\s*{symbol}\\s*;|typedef\\s+.*\\b{symbol}\\s*;|(struct|enum|union)\\s+{symbol}\\s*\\{{)"
+    elif mode == "callees":
+        return []
+
+    # 3. Build Command
+    cmd = []
+    if RG:
+        cmd = [RG, "-n", "--no-heading", pattern]
+    else:
+        cmd = ["git", "grep", "-n", "-E", pattern]
 
     try:
         res = subprocess.run(cmd, cwd=root, capture_output=True, text=True)
@@ -99,9 +118,33 @@ def query_grep(mode, symbol, root):
             parts = line.split(":", 2)
             if len(parts) >= 2:
                 hits.add(f"{parts[0]}:{parts[1]}")
-    except:
+    except Exception as e:
+        print(f"Search failed: {e}", file=sys.stderr)
         pass
-    return sorted(list(hits))
+
+    # 4. SORTING LOGIC (Name Affinity > Headers > Source)
+    def score(hit):
+        path_str = hit.split(":", 1)[0]
+        p_obj = Path(path_str)
+        fname = p_obj.stem.lower().replace("_", "")
+        sym_clean = symbol.lower().replace("_", "")
+        
+        # Tier 1: Filename matches symbol (e.g., zassert.h for z_assert)
+        if sym_clean == fname:
+            prio = 0
+        # Tier 2: Headers
+        elif p_obj.suffix in (".h", ".hpp", ".hh", ".hxx"):
+            prio = 1
+        # Tier 3: Everything else
+        else:
+            prio = 2
+            
+        return (prio, hit)
+
+        
+    return sorted(list(hits), key=score)
+
+
 
 # --- Main ---
 def main():
@@ -124,31 +167,37 @@ def main():
             print("  [i] Clang returned no results (or failed).", file=sys.stderr)
         results = query_grep(args.mode, args.symbol, root)
 
-    # --- Output ---
+# --- Output ---
     if not results:
         print("No results found.")
     else:
-        # Standard Output (Clean)
         print(f"# Map: {args.mode} of '{args.symbol}'")
-        for r in results[:20]:
-            print(f"- {r}")
-        if len(results) > 20:
-            print(f"... ({len(results) - 20} more)")
+        
+        # Deduplicate files while preserving sorted order
+        seen_files = set()
+        unique_ordered = []
+        for r in results:
+            # Split "path/to/file:123" -> "path/to/file"
+            if ":" in r:
+                fpath = r.rsplit(":", 1)[0]
+            else:
+                fpath = r
+            
+            if fpath not in seen_files:
+                seen_files.add(fpath)
+                unique_ordered.append(fpath)
+        
+        # Print top 20 unique files (Clean Paths)
+        for f in unique_ordered[:20]:
+            print(f"- {f}")
+            
+        if len(unique_ordered) > 20:
+            print(f"... ({len(unique_ordered) - 20} more files)")
             
         # Hint Output (Rich)
         if args.hint:
-            unique_files = set()
-            for r in results:
-                if ":" in r:
-                    fpath = r.rsplit(":", 1)[0]
-                    unique_files.add(fpath)
-                else:
-                    unique_files.add(r)
-            
-            file_list_str = " ".join(sorted(list(unique_files)))
-            
+            file_list_str = " ".join(unique_ordered)
             print("\n# 📋 Quick Read:")
             print(f"/read {file_list_str}")
-
 if __name__ == "__main__":
     main()

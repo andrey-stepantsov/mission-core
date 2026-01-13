@@ -11,6 +11,10 @@ def find_db(file_path, root_path):
     file_dir = Path(file_path).parent
     candidate = file_dir / "compile_commands.json"
     if candidate.exists(): return candidate
+    # Check: ASIC SDK Override
+    candidate = Path(root_path) / "asic/zsdk/compile_commands.json"
+    if candidate.exists(): return candidate
+    
     candidate = Path(root_path) / "compile_commands.json"
     if candidate.exists(): return candidate
     return None
