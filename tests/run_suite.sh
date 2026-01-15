@@ -54,3 +54,14 @@ else
     echo -e "Result: ${RED}SYSTEM UNSTABLE${NC}"
 fi
 exit $EXIT_CODE
+
+# 4. Integration Test (Swarm Chat)
+echo -n "[Swarm] Testing Agent Integration... "
+if python3 .mission/tests/test_integration_chat.py > /dev/null 2>&1; then
+     echo -e "${GREEN}PASSED${NC}"
+else
+     echo -e "${RED}FAILED${NC}"
+     # Re-run to show error
+     python3 .mission/tests/test_integration_chat.py
+     EXIT_CODE=1
+fi
