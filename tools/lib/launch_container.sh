@@ -5,6 +5,7 @@ TOOLS_ROOT="$(dirname "$SCRIPT_DIR")"
 MISSION_ROOT="$(dirname "$TOOLS_ROOT")"
 HOST_REPO_ROOT="$(dirname "$MISSION_ROOT")"
 
+# 1. Credential Logic
 if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     if [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
         export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/application_default_credentials.json"
@@ -16,38 +17,37 @@ if [ -z "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
     fi
 fi
 
+# 2. Defaults
 export VERTEXAI_PROJECT="${VERTEXAI_PROJECT:-gen-lang-client-0140206225}"
 export VERTEXAI_LOCATION="${VERTEXAI_LOCATION:-us-central1}"
-IMAGE="ghcr.io/andrey-stepantsov/aider-vertex:v1.2.1"
+IMAGE="aider-vertex"
 
 GIT_NAME=$(git config user.name || echo "Mission Developer")
 GIT_EMAIL=$(git config user.email || echo "dev@mission.core")
 
-# --- AUTO-GHOST ---
-# Only print if we are in a TTY to avoid polluting pipe output
-if [ -t 0 ]; then
-    echo "🔍 Scanning for external dependencies (Auto-Ghost)..."
-fi
-GHOST_MOUNTS=$("$TOOLS_ROOT/bin/auto_ghost")
+if [ -x "$TOOLS_ROOT/bin/auto_ghost" ]; then GHOST_MOUNTS=$("$TOOLS_ROOT/bin/auto_ghost"); fi
+if [ -x "$TOOLS_ROOT/bin/sync_ignore" ]; then "$TOOLS_ROOT/bin/sync_ignore" 2>/dev/null || true; fi
 
-if [ -t 0 ]; then
-    if [ -n "$GHOST_MOUNTS" ]; then
-        echo "   Ghost Mounts: $GHOST_MOUNTS"
-    else
-        echo "   Ghost Mounts: None"
-    fi
-fi
-
-# --- SYNC IGNORE ---
-"$TOOLS_ROOT/bin/sync_ignore" 2>/dev/null || true
-
-# --- TTY DETECTION ---
-# Only request a TTY (-t) if input is actually a terminal.
-# Always keep -i (interactive) to allow piping stdin.
 TTY_FLAG=""
-if [ -t 0 ]; then
-    TTY_FLAG="-t"
-fi
+if [ -t 0 ]; then TTY_FLAG="-t"; fi
+touch .mission/.global_gitignore
+
+printf "🐳 Launching Container (Unified Arch)...\n"
+
+# 3. The Unified Preflight Script
+# This runs INSIDE the container before the actual command.
+# It sets up git, then execs whatever arguments were passed.
+PREFLIGHT_SCRIPT=$(cat <<INNER_EOF
+set -e
+git config --global user.name "$GIT_NAME"
+git config --global user.email "$GIT_EMAIL"
+git config --global core.excludesfile /tmp/global_gitignore
+export PATH="/mission/tools/bin:\$PATH"
+
+# Handover to the requested command
+exec "\$@"
+INNER_EOF
+)
 
 DOCKER_ARGS=(
     -i $TTY_FLAG --rm
@@ -67,39 +67,20 @@ DOCKER_ARGS=(
     -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/auth.json
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
     -e VERTEXAI_LOCATION="${VERTEXAI_LOCATION}"
+    -e DIRECTOR_MODEL="${DIRECTOR_MODEL}"
     -w "/repo"
 )
 
-if [ -n "$MISSION_RULES_FILE" ]; then
-    DOCKER_ARGS+=(-v "$MISSION_RULES_FILE:/etc/mission_rules.md:ro,z")
-fi
-
-if [ -t 0 ]; then
-    echo "🐳 Launching Container ($IMAGE)..."
-fi
-
-PREFLIGHT_SCRIPT=$(cat <<INNER_EOF
-set -e
-git config --global user.name "$GIT_NAME"
-git config --global user.email "$GIT_EMAIL"
-git config --global core.excludesfile /tmp/global_gitignore
-
-export PATH="/mission/tools/bin:\$PATH"
-exec aider-vertex "\$@"
-INNER_EOF
-)
-
 if [[ -z "$1" ]] || [[ "$1" == -* ]]; then
-      # AIDER MODE
-      AIDER_ARGS=("--model" "vertex_ai/gemini-2.5-pro" "--restore-chat-history")
-      if [ -n "$MISSION_RULES_FILE" ]; then
-          AIDER_ARGS+=("--read" "/etc/mission_rules.md")
-      fi
+      # AIDER MODE: We explicitly pass 'aider-vertex' as the command to the preflight
+      AIDER_ARGS=("aider-vertex" "--model" "vertex_ai/gemini-2.5-pro" "--no-auto-commits" "--read" "/mission/data/mission_log.md")
       AIDER_ARGS+=("$@")
       
       exec docker run --entrypoint /bin/bash "${DOCKER_ARGS[@]}" \
            "$IMAGE" -c "$PREFLIGHT_SCRIPT" -- "${AIDER_ARGS[@]}"
 else
-      # SHELL/EXEC MODE
-      exec docker run --entrypoint "" "${DOCKER_ARGS[@]}" "$IMAGE" "$@"
+      # EXEC MODE: We pass the user command (e.g. bash) to the preflight
+      # This ensures 'git config' runs even for shells.
+      exec docker run --entrypoint /bin/bash "${DOCKER_ARGS[@]}" \
+           "$IMAGE" -c "$PREFLIGHT_SCRIPT" -- "$@"
 fi

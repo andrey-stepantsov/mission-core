@@ -1,31 +1,6 @@
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCHER="$DIR/../lib/launch_container.sh"
-PROMPTS_DIR="$(cd "$DIR/../../prompts" && pwd)"
 
-# --- NEW: Cartridge Detection Logic ---
-# Resolve Host Repo Root (two levels up from .mission/tools/bin)
-REPO_ROOT="$(cd "$DIR/../../../" && pwd)"
-PROJECT_RULES="$REPO_ROOT/.mission-context/leader_rules.md"
-
-if [ -f "$PROJECT_RULES" ]; then
-    echo "🎯 [Cartridge] Loading mission prompts from: .mission-context/leader_rules.md"
-    export MISSION_RULES_FILE="$PROJECT_RULES"
-else
-    echo "🏠 [Default] No cartridge found. Using system prompts."
-    export MISSION_RULES_FILE="$PROMPTS_DIR/coder_rules.md"
-fi
-
-MAIN_MODEL="vertex_ai/gemini-2.5-pro"
-WEAK_MODEL="vertex_ai/gemini-2.5-flash"
-
-echo "💻 Coder Persona"
-exec "$LAUNCHER" \
-    --model "$MAIN_MODEL" \
-    --weak-model "$WEAK_MODEL" \
-    --no-auto-lint \
-    --no-auto-commits \
-    --chat-history-file .aider.coder.history.md \
-    --input-history-file .aider.coder.input.history \
-    --restore-chat-history \
-    "$@"
+echo "💻 Coder Persona (Original)"
+exec "$LAUNCHER" "$@"

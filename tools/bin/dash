@@ -1,33 +1,54 @@
 #!/bin/bash
-SESSION="mission-control"
-BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
-TOOLS_DIR="$(dirname "$BIN_DIR")"
-MISSION_DIR="$(dirname "$TOOLS_DIR")"
-PROJECT_ROOT="$(dirname "$MISSION_DIR")"
-MONITOR_CMD="${MISSION_MONITOR:-/bin/bash}"
+SESSION="hybrid-swarm"
+DIR=$(dirname "$(readlink -f "$0")")
+TOOLS_BIN=$(cd "$DIR" && pwd)
+cd "$(dirname "$DIR")/../.."
 
-tmux kill-session -t "$SESSION" 2>/dev/null || true
+# 1. Hard Kill Old Session
+tmux kill-session -t "$SESSION" 2>/dev/null
 
-echo "🚀 Initializing Mission Control..."
-echo "📍 Context: $PROJECT_ROOT"
+printf "🚀 Launching Swarm (Tiled Layout)...\n"
 
-tmux new-session -d -s "$SESSION" -n "Mission" -c "$PROJECT_ROOT"
-tmux split-window -h -t "$SESSION:Mission.0" -p 66 -c "$PROJECT_ROOT"
-tmux split-window -h -t "$SESSION:Mission.1" -p 50 -c "$PROJECT_ROOT"
-tmux split-window -v -t "$SESSION:Mission.2" -p 50 -c "$PROJECT_ROOT"
+# 2. Create Session (Pane 0)
+tmux new-session -d -s "$SESSION" -n "HQ"
 
-# Pane 0: Architect (Agent)
-tmux send-keys -t "$SESSION:Mission.0" "clear; '$BIN_DIR/architect'" C-m
+# 3. Create 4 Panes first (Force Tiled)
+tmux split-window -h   # Split to 2
+tmux split-window -v   # Split Right to 2
+tmux select-pane -t 0
+tmux split-window -v   # Split Left to 2
+tmux select-layout tiled
 
-# Pane 1: Coder (Agent)
-tmux send-keys -t "$SESSION:Mission.1" "clear; '$BIN_DIR/coder'" C-m
+# Now we have 4 panes. We target them by approximate position.
+# Pane 0: Top Left
+# Pane 1: Bottom Left
+# Pane 2: Top Right
+# Pane 3: Bottom Right
 
-# Pane 2: Shell (Human/Container)
-# CHANGED: Now launches the hermetic shell instead of just echoing
-tmux send-keys -t "$SESSION:Mission.2" "clear; '$BIN_DIR/shell'" C-m
+# PANE 0: Director (Top Left)
+tmux select-pane -t 0
+tmux send-keys "clear; .mission/tools/bin/director" C-m
+tmux select-pane -T "Director (Strategy)"
 
-# Pane 3: Monitor (Host/Logs)
-tmux send-keys -t "$SESSION:Mission.3" "echo '--- 🔭 Monitor ---'; $MONITOR_CMD" C-m
+# PANE 1: Toolsmith (Bottom Left)
+tmux select-pane -t 1
+tmux send-keys "clear; .mission/tools/bin/toolsmith_local" C-m
+tmux select-pane -T "Toolsmith (Ops)"
 
-tmux select-pane -t "$SESSION:Mission.1"
+# PANE 2: Coder (Top Right)
+tmux select-pane -t 2
+tmux send-keys "clear; .mission/tools/bin/coder" C-m
+tmux select-pane -T "Coder (Docker)"
+
+# PANE 3: Command (Bottom Right)
+tmux select-pane -t 3
+tmux send-keys "export PATH=\$PATH:$TOOLS_BIN" C-m
+tmux send-keys "clear" C-m
+tmux send-keys "echo '🎙️ Control Plane Online'" C-m
+tmux send-keys "echo '   tx \"msg\"      -> Send Request'" C-m
+tmux send-keys "echo '   rx            -> Watch Log'" C-m
+tmux select-pane -T "Command (You)"
+
+# 4. Attach
+tmux select-pane -t 3
 exec tmux attach-session -t "$SESSION"
