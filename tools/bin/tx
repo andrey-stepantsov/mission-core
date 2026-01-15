@@ -1,0 +1,10 @@
+#!/bin/bash
+if [ -p /dev/stdin ]; then
+    MSG=$(cat)
+elif [ "$#" -gt 0 ]; then
+    MSG="$*"
+else
+    echo "Usage: tx <message> OR echo 'msg' | tx"
+    exit 1
+fi
+$(dirname "$0")/radio tx --from User --to Director --type REQ --msg "$MSG"

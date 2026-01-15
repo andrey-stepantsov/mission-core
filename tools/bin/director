@@ -1,0 +1,38 @@
+#!/bin/bash
+set -e
+
+# A. Locate Root
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# B. Resolve Credentials
+if [ -n "$GOOGLE_APPLICATION_CREDENTIALS" ]; then
+    HOST_CREDS="$GOOGLE_APPLICATION_CREDENTIALS"
+elif [ -f "$HOME/.config/gcloud/application_default_credentials.json" ]; then
+    HOST_CREDS="$HOME/.config/gcloud/application_default_credentials.json"
+elif [ -f "/tmp/auth.json" ]; then
+    HOST_CREDS="/tmp/auth.json"
+else
+    echo "❌ Error: No Google Credentials found on Host."
+    exit 1
+fi
+
+# C. Define Container Path
+CONTAINER_CREDS="/root/auth.json"
+
+# D. Launch
+# Model: vertex_ai/gemini-2.5-pro (As requested)
+# Telemetry: FALSE (Speed fix)
+# Auth: Explicit Mount (Timeout fix)
+
+docker run --rm -i \
+    -v "$REPO_ROOT:/mission" \
+    -v "$HOST_CREDS:$CONTAINER_CREDS:ro" \
+    -e GOOGLE_APPLICATION_CREDENTIALS="$CONTAINER_CREDS" \
+    -e DIRECTOR_MODEL="${DIRECTOR_MODEL:-vertex_ai/gemini-2.5-pro}" \
+    -e LITELLM_TELEMETRY="FALSE" \
+    -e PYTHONPATH="/mission/.mission/tools/lib" \
+    -w /mission \
+    --entrypoint /bin/python3 \
+    aider-vertex:latest \
+    /mission/.mission/tools/lib/director.py "$@"

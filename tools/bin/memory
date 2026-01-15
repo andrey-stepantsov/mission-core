@@ -1,0 +1,24 @@
+#!/bin/bash
+# Resolves paths relative to .mission/tools/bin/
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$(dirname "$(dirname "$DIR")")")"
+LOG_FILE="$REPO_ROOT/.mission-context/mission_log.md"
+ARCHIVE_DIR="$REPO_ROOT/.mission-context/archive"
+
+CMD=$1
+
+if [ "$CMD" == "reset" ]; then
+    echo "🧹 Wiping Memory: $LOG_FILE"
+    mkdir -p "$ARCHIVE_DIR"
+    
+    if [ -f "$LOG_FILE" ]; then
+        TIMESTAMP=$(date +%s)
+        mv "$LOG_FILE" "$ARCHIVE_DIR/mission_log_$TIMESTAMP.md"
+        echo "# Mission Log (Reset)" > "$LOG_FILE"
+        echo "  [✓] Old log archived."
+    else
+        echo "  [!] No log found."
+    fi
+else
+    echo "Usage: memory reset"
+fi

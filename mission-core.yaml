@@ -1,0 +1,65 @@
+name: mission-core
+version: 2.1.0
+description: "The Unified Container Architecture for Embedded AI Agents"
+
+architecture:
+  container:
+    image: "aider-vertex:latest"
+    mounts:
+      - host: "."
+        container: "/repo"
+        mode: "rw"
+        description: "Source code workspace"
+      - host: ".mission"
+        container: "/mission"
+        mode: "rw" # Read-Only for agents via logic, RW for Core Smith
+        description: "The Toolchain Engine"
+      - host: "~/.config/gcloud"
+        container: "/tmp/auth.json"
+        mode: "ro"
+        description: "Google Cloud Credentials"
+
+components:
+  radio:
+    description: "Asynchronous Message Bus (IPC)"
+    journal_path: ".mission-context/mission_log.md"
+    resolution_strategy:
+      priority_1: "Env Var: MISSION_LOG_FILE"
+      priority_2: "Docker: /repo/.mission-context/mission_log.md"
+      priority_3: "Host: .mission-context/mission_log.md"
+      fallback: ".mission/data/mission_log.md"
+
+  director:
+    role: "Strategy & Planning"
+    execution: "Containerized"
+    launcher: "tools/bin/director"
+    working_dir: "/mission"
+    artifacts:
+      plans: ".mission-context/plans/"
+      logs: ".mission-context/mission_log.md"
+    constraints:
+      - "Cannot edit source code directly"
+      - "Cannot modify .mission toolchain"
+
+  toolsmith_local:
+    role: "Configuration & Verification"
+    execution: "Containerized"
+    launcher: "tools/bin/toolsmith_local"
+    working_dir: "/repo"
+    responsibilities:
+      - "Edit .ddd/config.json"
+      - "Manage .ddd/filters/*.py"
+      - "Run verification via ddd-test"
+    constraints:
+      - "Must verify all changes using ddd-test before ACKing"
+
+  toolsmith_core:
+    role: "System Upgrade (Self-Healing)"
+    execution: "Containerized"
+    launcher: "tools/lib/launch_container.sh"
+    working_dir: "/mission"
+    responsibilities:
+      - "Upgrade tools/lib/*.py"
+      - "Patch tools/bin/*"
+    constraints:
+      - "The only agent allowed to write to /mission"

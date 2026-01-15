@@ -1,0 +1,32 @@
+name: dead-drop-daemon
+version: 1.5.0
+description: "The Build & Test Watchdog"
+
+components:
+  daemon:
+    execution: "Host Native"
+    location: ".ddd/"
+    role: "File watcher and build trigger"
+    dependencies: ["inotifywait", "make"]
+  
+  local_smith:
+    execution: "Containerized"
+    role: "Configuration Agent"
+    mount_point: "/repo"
+    
+  test_harness:
+    binary: "/mission/tools/ddd/bin/ddd-test"
+    runtime: "Python 3 (Container Environment)"
+    framework: "pytest"
+    scope:
+      - "Verify regex filters in .ddd/filters/"
+      - "Validate config.json schema"
+
+workflow:
+  configuration_update:
+    1. User: "Requests filter change via Radio"
+    2. Local Smith (Container): "Edits .ddd/filters/my_filter.py"
+    3. Local Smith (Container): "Runs /mission/tools/ddd/bin/ddd-test"
+    4. Test Harness: "Returns Pass/Fail"
+    5. Local Smith (Container): "ACKs to User (if Pass) or LOGs error (if Fail)"
+    6. Daemon (Host): "Detects file change, reloads config automatically"
