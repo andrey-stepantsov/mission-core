@@ -1,23 +1,25 @@
 #!/bin/bash
 # Local Smith Launcher (Containerized)
 
+# Resolve Paths
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MISSION_DIR="$(dirname "$(dirname "$CURRENT_DIR")")"
 LAUNCHER="$MISSION_DIR/tools/lib/launch_container.sh"
-AGENT_SCRIPT="/mission/tools/lib/toolsmith_local.py"
+DEFAULT_AGENT_SCRIPT="/mission/tools/lib/toolsmith_local.py"
 
 if [ ! -f "$LAUNCHER" ]; then
     echo "Error: Cannot find launch_container.sh at $LAUNCHER"
     exit 1
 fi
 
-# Check for arguments
+# Logic:
+# If arguments are provided, pass them through.
+# If NO arguments, launch the Default Agent in UNBUFFERED mode (-u).
+# The -u is critical for real-time logging in Docker.
+
 if [ $# -eq 0 ]; then
-    # No arguments -> Run the Agent (Infinite Loop)
-    echo "🔧 Starting Local Smith (Containerized)..."
-    exec "$LAUNCHER" bash -c "python3 $AGENT_SCRIPT"
+    # exec "$LAUNCHER" python3 -u "$DEFAULT_AGENT_SCRIPT"
+    exec "$LAUNCHER" python3 -u "$DEFAULT_AGENT_SCRIPT"
 else
-    # Arguments provided -> Pass them to the container
-    # This allows commands like: ./toolsmith_local bash -c "ls -la /repo"
     exec "$LAUNCHER" "$@"
 fi

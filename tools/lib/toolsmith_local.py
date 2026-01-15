@@ -1,105 +1,190 @@
+#!/usr/bin/env python3
 import time
-import os
 import sys
+import os
 import re
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
-# Force Line Buffering for Docker Logs
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
-
-# Add radio to path (Assuming /mission/tools/lib structure)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Import Radio
+current_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(current_dir))
 import radio
 
-MY_NAME = "LocalSmith"
-POLL_INTERVAL = 1.0
+# Configuration
+AGENT_NAME = "LocalSmith"
+REPO_ROOT = Path("/repo") # Container View
+DDD_DIR = REPO_ROOT / ".ddd"
+CONFIG_FILE = DDD_DIR / "config.json"
 
-# Paths (Container View)
-REPO_ROOT = Path("/repo")
-DDD_CONFIG = REPO_ROOT / ".ddd" / "config.json"
-DDD_TEST_BIN = Path("/mission/tools/ddd/bin/ddd-test")
+def log(msg):
+    """Stdout log for container logs."""
+    print(f"[{AGENT_NAME}] {msg}")
 
-def run_verification():
-    """Runs the ddd-test harness to verify config changes."""
-    print("   [Test] Running DDD Verification...")
-    if not DDD_TEST_BIN.exists():
-        return False, "Error: ddd-test binary not found in container."
-    
+def execute_shell(command):
+    """Run a shell command and return output."""
     try:
-        # We run ddd-test from the repo root
         result = subprocess.run(
-            [str(DDD_TEST_BIN)], 
+            command, 
+            shell=True, 
             cwd=str(REPO_ROOT),
-            capture_output=True,
+            capture_output=True, 
             text=True
         )
-        if result.returncode == 0:
-            return True, "Verification Passed."
-        else:
-            # Shorten output to prevent log bloating
-            err_msg = result.stderr[:500] + "..." if len(result.stderr) > 500 else result.stderr
-            return False, f"Verification Failed:\n{err_msg}"
+        return result.stdout.strip() + "\n" + result.stderr.strip()
     except Exception as e:
-        return False, f"Harness Error: {e}"
+        return f"Execution Error: {str(e)}"
+
+def handle_backup(filename):
+    """CMD: backup <file>"""
+    src = DDD_DIR / filename
+    dst = DDD_DIR / (filename + ".bak")
+    
+    if not src.exists():
+        return f"Error: File {filename} not found in .ddd"
+        
+    try:
+        shutil.copy(src, dst)
+        return f"Backup created: {dst}"
+    except Exception as e:
+        return f"Backup failed: {e}"
+
+def smart_strip_quotes(text):
+    """Removes quotes only if they wrap the content."""
+    text = text.strip()
+    if len(text) >= 2:
+        if text.startswith('"') and text.endswith('"'):
+            return text[1:-1]
+        if text.startswith("'") and text.endswith("'"):
+            return text[1:-1]
+    return text
+
+def handle_config_update(key, value):
+    """CMD: set <key> to <value>"""
+    if not CONFIG_FILE.exists():
+        return "Error: config.json not found"
+        
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            data = json.load(f)
+        
+        # SMART FIX HERE
+        clean_value = smart_strip_quotes(value)
+        data[key] = clean_value
+        
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
+            
+        return f"Config updated: {key} = {clean_value}"
+    except Exception as e:
+        return f"Config update failed: {e}"
+
+def handle_create_filter(name, content):
+    """CMD: create filter <name> with content: <content>"""
+    filters_dir = DDD_DIR / "filters"
+    if not filters_dir.exists():
+        os.makedirs(filters_dir)
+        
+    target_file = filters_dir / name
+    
+    # Clean up markdown code blocks if present
+    clean_content = content
+    if "```python" in clean_content:
+        clean_content = clean_content.split("```python")[1].split("```")[0].strip()
+    elif "```" in clean_content:
+        clean_content = clean_content.split("```")[1].split("```")[0].strip()
+        
+    try:
+        with open(target_file, 'w') as f:
+            f.write(clean_content)
+        return f"Filter created: {target_file}"
+    except Exception as e:
+        return f"Write failed: {e}"
+
+def handle_run_verification():
+    """CMD: run verification"""
+    if not CONFIG_FILE.exists():
+        return "Error: No config found"
+        
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            data = json.load(f)
+        
+        cmd = data.get("verification_command", "echo 'No command defined'")
+        log(f"Running verification: {cmd}")
+        output = execute_shell(cmd)
+        return f"Verification Output:\n{output}"
+    except Exception as e:
+        return f"Verification failed: {e}"
 
 def process_request(request, sender):
-    print(f"🔨 Processing request from {sender}")
-    
-    # 1. Simulate Action
-    action_log = f"Analyzed request from {sender}. (Simulated Edit)"
-    
-    # 2. Verify
-    success, message = run_verification()
-    
-    if success:
-        return "ACK", f"{action_log}\n\n✅ {message}"
-    else:
-        return "LOG", f"{action_log}\n\n❌ {message}"
+    """The Brain: Routing Logic."""
+    req_lower = request.lower()
+    # Keep the debug log for now, it's useful
+    log(f"Processing RAW: {repr(request)}")
+
+    # 1. Backup
+    if req_lower.startswith("backup "):
+        filename = request.split(" ", 1)[1].strip()
+        result = handle_backup(filename)
+        radio.append_entry(AGENT_NAME, sender, "ACK", result)
+        return
+
+    # 2. Config Update
+    match_set = re.match(r"set\s+(\w+)\s+to\s*[:]?\s*(.+)", request, re.IGNORECASE)
+    if match_set:
+        key = match_set.group(1)
+        value = match_set.group(2)
+        result = handle_config_update(key, value)
+        radio.append_entry(AGENT_NAME, sender, "ACK", result)
+        return
+
+    # 3. Create Filter
+    match_filter = re.match(r"create filter\s+([\w\.]+)\s+with content:?\s*(.*)", request, re.IGNORECASE | re.DOTALL)
+    if match_filter:
+        name = match_filter.group(1)
+        content = match_filter.group(2)
+        result = handle_create_filter(name, content)
+        radio.append_entry(AGENT_NAME, sender, "ACK", result)
+        return
+
+    # 4. Run Verification
+    if "run verification" in req_lower:
+        result = handle_run_verification()
+        radio.append_entry(AGENT_NAME, sender, "ACK", result)
+        return
+
+    # Fallback
+    radio.append_entry(AGENT_NAME, sender, "LOG", f"Unknown command: {request[:30]}...")
 
 def main():
-    print(f"🔧 Local Smith Online (Containerized)")
-    print(f"   Watching: {radio.DEFAULT_LOG}")
+    log("Online. Monitoring radio frequencies...")
     
-    log_path = radio.DEFAULT_LOG
-    last_pos = 0
-    if os.path.exists(log_path):
-        last_pos = os.path.getsize(log_path)
+    if not os.path.exists(radio.DEFAULT_LOG):
+        with open(radio.DEFAULT_LOG, 'w') as f:
+            f.write(f"# Mission Log - {AGENT_NAME}\n")
 
-    while True:
-        try:
-            if os.path.exists(log_path):
-                current_size = os.path.getsize(log_path)
-                
-                if current_size > last_pos:
-                    with open(log_path, 'r') as f:
-                        f.seek(last_pos)
-                        new_lines = f.readlines()
-                        last_pos = f.tell()
-
-                    for line in new_lines:
-                        # CRITICAL FIX: Only match lines STARTING with ###
-                        # This prevents matching quoted messages inside other messages
-                        if not line.startswith("###"):
-                            continue
-                            
-                        match = re.match(r"^### \[.*\] \[(.*) -> (.*)\] \[(.*)\]", line)
-                        if match:
-                            sender, recipient, msg_type = match.group(1), match.group(2), match.group(3)
-                            
-                            if recipient == MY_NAME and msg_type == "REQ":
-                                print(f"⚡️ Activated by {sender}")
-                                reply_type, reply_msg = process_request(line, sender)
-                                radio.append_entry(MY_NAME, sender, reply_type, reply_msg)
-                
-                elif current_size < last_pos:
-                    last_pos = 0
-        except Exception as e:
-            print(f"Error: {e}")
+    with open(radio.DEFAULT_LOG, "r") as f:
+        f.seek(0, 2)
         
-        time.sleep(POLL_INTERVAL)
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(1)
+                continue
+            
+            # log(f"READ LINE: {repr(line)}") # Verbose debug off for prod
+            
+            if f"-> {AGENT_NAME}]" in line and "[REQ]" in line:
+                try:
+                    parts = line.split("->")
+                    sender_part = parts[0].split("[")[-1].strip()
+                    msg_content = line.split("[REQ]", 1)[1].strip()
+                    process_request(msg_content, sender_part)
+                except Exception as e:
+                    log(f"Parse Error: {e}")
 
 if __name__ == "__main__":
     main()
