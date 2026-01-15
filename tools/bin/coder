@@ -1,6 +1,30 @@
 #!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-LAUNCHER="$DIR/../lib/launch_container.sh"
+# Coder Agent Launcher (Containerized)
+
+# Resolve Paths
+CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MISSION_DIR="$(dirname "$(dirname "$CURRENT_DIR")")"
+LAUNCHER="$MISSION_DIR/tools/lib/launch_container.sh"
+
+# Artifact Paths (Container View)
+# Note: In the container, the repo is at /repo
+JOURNAL_PATH="/repo/.mission-context/mission_log.md"
+PLANS_DIR="/repo/.mission-context/plans"
+RULES_FILE="/mission/prompts/coder_rules.md"
+
+# Verify Launcher
+if [ ! -f "$LAUNCHER" ]; then
+    echo "Error: Cannot find launch_container.sh at $LAUNCHER"
+    exit 1
+fi
 
 echo "💻 Coder Persona (Original)"
-exec "$LAUNCHER" "$@"
+
+# Launch Aider via Container
+# We pass the journal as a read-only file so the Coder has context
+exec "$LAUNCHER" aider \
+    --message "You are the Coder. Follow the rules in $RULES_FILE." \
+    --read "$JOURNAL_PATH" \
+    --read "$RULES_FILE" \
+    --file "$PLANS_DIR" \
+    "$@"
