@@ -3,10 +3,20 @@
 # Architecture: Unified Image, Python Orchestrator
 
 # --- Configuration ---
-REPO_ROOT=$(git rev-parse --show-toplevel)
-MISSION_ROOT="$REPO_ROOT/.mission"
+# Logic: We are in .mission/tools/bin/up
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MISSION_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")" # .mission
+REPO_ROOT="$(dirname "$MISSION_ROOT")" # The Parent Repo (chaos)
 ENV_FILE="$REPO_ROOT/.env"
-IMG_NAME="aider-vertex:latest"
+IMG_NAME="mission-core:latest"
+BASE_IMG="aider-vertex:latest"
+
+# Upstream Defaults (Can be overridden by env)
+DEFAULT_UPSTREAM_REPO="github:andrey-stepantsov/aider-vertex#docker"
+DEFAULT_BASE_REGISTRY="ghcr.io/andrey-stepantsov/aider-vertex:latest"
+
+UPSTREAM_REPO="${MISSION_UPSTREAM_REPO:-$DEFAULT_UPSTREAM_REPO}"
+BASE_IMAGE_REGISTRY="${MISSION_BASE_REGISTRY:-$DEFAULT_BASE_REGISTRY}"
 
 # --- 1. Load Environment ---
 if [ -f "$ENV_FILE" ]; then
@@ -18,6 +28,48 @@ fi
 
 # --- 2. Build Image (Fast) ---
 echo "🐳 Checking System..."
+
+ensure_base_image() {
+    if docker image inspect "$BASE_IMG" > /dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "⚠️  Base image '$BASE_IMG' not found."
+    ARCH=$(uname -m)
+
+    if [[ "$ARCH" == "arm64" ]] || [[ "$ARCH" == "aarch64" ]]; then
+        echo "🍎 Apple Silicon / ARM64 Detected."
+        echo "🛠  Initiating Nix Bootstrap (Native Build)..."
+        echo "   (This may take a few minutes, but solves emulation crashes)"
+        
+        # The M1 Bootstrap "Different Path"
+        docker run --rm \
+            --platform linux/arm64 \
+            -v "$(pwd)/.mission:/app" -w /app \
+            nixos/nix \
+            bash -c "nix --extra-experimental-features 'nix-command flakes' build $UPSTREAM_REPO > /dev/null && cat result" > /tmp/aider-vertex.tar.gz
+            
+            
+        if [ $? -eq 0 ]; then
+            echo "📥 Loading Native Image..."
+            docker load < /tmp/aider-vertex.tar.gz
+            rm /tmp/aider-vertex.tar.gz
+        else
+            echo "❌ Bootstrap Failed."
+            exit 1
+        fi
+    else
+        echo "💻 x86_64 Detected."
+        echo "   Please pull the image: docker pull $BASE_IMAGE_REGISTRY"
+        echo "   Or tag your local build."
+        exit 1
+    fi
+}
+
+# Run the check
+ensure_base_image
+
+echo "hammer_and_wrench Building Mission Core..."
 docker build -t "$IMG_NAME" -f "$MISSION_ROOT/tools/Dockerfile" "$MISSION_ROOT/tools" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "❌ Build failed. Check Docker."
@@ -33,7 +85,7 @@ if ! docker ps | grep -q "$CONTAINER_SMITH"; then
         --rm \
         -v "$REPO_ROOT:/repo" \
         -e MISSION_JOURNAL="/repo/.mission-context/mission_log.md" \
-        -e PYTHONPATH="/repo/.mission/tools/lib" \
+        -e PYTHONPATH="/mission/.venv/lib/python3.11/site-packages:/repo/.mission/tools/lib:$PYTHONPATH" \
         --entrypoint python3 \
         "$IMG_NAME" \
         "/repo/.mission/tools/lib/toolsmith_local.py" > /dev/null
@@ -53,7 +105,7 @@ docker run -it --rm \
     -v "$HOME/.config/gcloud:/root/.config/gcloud" \
     --env-file "$ENV_FILE" \
     -e GOOGLE_APPLICATION_CREDENTIALS="/root/.config/gcloud/application_default_credentials.json" \
-    -e PYTHONPATH="/repo/.mission/tools/lib" \
+    -e PYTHONPATH="/mission/.venv/lib/python3.11/site-packages:/repo/.mission/tools/lib:$PYTHONPATH" \
     --entrypoint python3 \
     "$IMG_NAME" \
     "/repo/.mission/tools/lib/director.py"

@@ -27,6 +27,16 @@ TEST_FILTER = FILTER_DIR / "ignore_info.py"
 class TestConfigFlow(unittest.TestCase):
     def setUp(self):
         """Prepare the battlefield."""
+        # Fix: Align Host Radio with Container Radio
+        # Container sees /repo (Parent Root) and writes to /repo/.mission-context/mission_log.md
+        # We must verify against that same file on the Host.
+        host_log_path = REPO_ROOT / ".mission-context" / "mission_log.md"
+        radio.DEFAULT_LOG = str(host_log_path)
+        
+        # Ensure dir
+        if not host_log_path.parent.exists():
+            os.makedirs(host_log_path.parent)
+
         with open(radio.DEFAULT_LOG, 'w') as f:
             f.write("# Scenario Test Log\n")
         
@@ -102,9 +112,10 @@ class TestConfigFlow(unittest.TestCase):
 
         # --- STEP 1: BACKUP ---
         print("\n--- Step 1: Request Backup ---")
-        radio.append_entry("Director", "LocalSmith", "REQ", "backup config.json")
-        # specific check for 'Backup created'
-        ack1 = self.wait_for_ack("LocalSmith", "Director", match_text="Backup created")
+        # Fix: Target the file where it actually lives (.ddd/config.json)
+        radio.append_entry("Director", "LocalSmith", "REQ", "backup .ddd/config.json")
+        # specific check for 'Success' (toolsmith returns this on cp success)
+        ack1 = self.wait_for_ack("LocalSmith", "Director", match_text="Success")
         self.assertIsNotNone(ack1, "Step 1: Agent timed out")
         self.assertTrue(CONFIG_BAK.exists(), "Backup file was not created!")
         print("   [✓] Backup confirmed.")

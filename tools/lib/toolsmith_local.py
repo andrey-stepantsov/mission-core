@@ -56,17 +56,54 @@ def process_command(cmd_text):
             key = parts[1]
             value = parts[2]
             # Remove "to" or "=" if present
-            if value.startswith("to "): value = value[3:]
+            if value.startswith("to: "): value = value[4:]
+            elif value.startswith("to "): value = value[3:]
             elif value.startswith("= "): value = value[2:]
             
-            # Simulate saving config
+            # Read-Modify-Write
             config_path = os.path.join(REPO_ROOT, ".ddd")
             os.makedirs(config_path, exist_ok=True)
-            with open(os.path.join(config_path, "config.json"), "w") as f:
-                json.dump({key: value}, f)
+            cfg_file = os.path.join(config_path, "config.json")
+            
+            data = {}
+            if os.path.exists(cfg_file):
+                with open(cfg_file, "r") as f:
+                    try:
+                        data = json.load(f)
+                    except: pass
+            
+            data[key] = value
+            
+            with open(cfg_file, "w") as f:
+                json.dump(data, f)
                 
             return f"Config updated: {key} -> {value}"
+            return f"Config updated: {key} -> {value}"
         return "Config format error. Use: set <key> to <value>"
+
+    # 3. CREATE FILTER (New)
+    elif cmd_clean.startswith("create filter "):
+        # Format: create filter <name> with content: <content>
+        try:
+            parts = cmd_clean.split(" with content: ", 1)
+            filename = parts[0].replace("create filter ", "").strip()
+            content = parts[1].strip()
+            
+            # Clean backticks
+            if content.startswith("```python"): content = content[9:]
+            elif content.startswith("```"): content = content[3:]
+            if content.endswith("```"): content = content[:-3]
+            content = content.strip()
+            
+            filter_dir = os.path.join(REPO_ROOT, ".ddd", "filters")
+            os.makedirs(filter_dir, exist_ok=True)
+            
+            with open(os.path.join(filter_dir, filename), "w") as f:
+                f.write(content)
+                
+            return f"Filter created: {filename}"
+        except Exception as e:
+            return f"Error creating filter: {e}"
 
     # 3. VERIFICATION
     elif "verification" in cmd_clean:

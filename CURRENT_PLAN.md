@@ -35,6 +35,8 @@ We maintain a clean separation between repository metadata and the toolchain.
 - [x] **Personas:** Created `architect` and `coder` wrappers for Docker.
 
 ### Phase 3: The Context Pipe (Next)
-- [ ] **Mounting:** Ensure the Docker container can see and execute `tools/bin/weave`.
+### Phase 3: The Context Pipe (Current)
+- [x] **Dependencies:** Implemented Docker Extension strategy (`tools/Dockerfile`) with native M1 support.
+- [ ] **Context Tooling:** Ensure the Agent (Director) can execute `tools/bin/weave` inside the container.
+- [ ] **Integration:** Verify Aider can use `weave` to load files (Triple-Head Architecture).
 - [ ] **Handoff:** Create tools to pipe chat history/summary.
-- [ ] **Integration:** Verify Aider can use `weave` to load files.

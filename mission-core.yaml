@@ -7,11 +7,11 @@ architecture:
     image: "aider-vertex:latest"
     mounts:
       - host: "."
-        container: "/repo"
+        container: "/repo" # Primary mount point used by 'up' script
         mode: "rw"
         description: "Source code workspace"
       - host: ".mission"
-        container: "/mission"
+        container: "/mission" # Secondary mount context
         mode: "rw" # Read-Only for agents via logic, RW for Core Smith
         description: "The Toolchain Engine"
       - host: "~/.config/gcloud"
@@ -20,46 +20,48 @@ architecture:
         description: "Google Cloud Credentials"
 
 components:
-  radio:
-    description: "Asynchronous Message Bus (IPC)"
-    journal_path: ".mission-context/mission_log.md"
-    resolution_strategy:
-      priority_1: "Env Var: MISSION_LOG_FILE"
-      priority_2: "Docker: /repo/.mission-context/mission_log.md"
-      priority_3: "Host: .mission-context/mission_log.md"
-      fallback: ".mission/data/mission_log.md"
-
   director:
-    role: "Strategy & Planning"
+    role: "The Brain (Strategist)"
     execution: "Containerized"
     launcher: "tools/bin/director"
     working_dir: "/mission"
-    artifacts:
-      plans: ".mission-context/plans/"
-      logs: ".mission-context/mission_log.md"
-    constraints:
-      - "Cannot edit source code directly"
-      - "Cannot modify .mission toolchain"
+    access: "Write: Logs, Read: Repo"
+    description: "Issues commands via Radio. Plans strategy."
 
-  toolsmith_local:
-    role: "Configuration & Verification"
+  localsmith:
+    role: "The Hands (Technician)"
     execution: "Containerized"
     launcher: "tools/bin/toolsmith_local"
     working_dir: "/repo"
-    responsibilities:
-      - "Edit .ddd/config.json"
-      - "Manage .ddd/filters/*.py"
-      - "Run verification via ddd-test"
-    constraints:
-      - "Must verify all changes using ddd-test before ACKing"
+    access: "Read: Logs, Write: ACKs, Files (.ddd/)"
+    description: "Executes shell commands and config updates."
 
-  toolsmith_core:
-    role: "System Upgrade (Self-Healing)"
-    execution: "Containerized"
-    launcher: "tools/lib/launch_container.sh"
-    working_dir: "/mission"
-    responsibilities:
-      - "Upgrade tools/lib/*.py"
-      - "Patch tools/bin/*"
-    constraints:
-      - "The only agent allowed to write to /mission"
+  coder:
+    role: "The Builder (Implementer)"
+    execution: "Containerized (Aider)"
+    launcher: "tools/bin/coder"
+    working_dir: "/repo"
+    access: "Read: Logs (Context), Write: Codebase"
+    description: "Human-Guided. Reads Mission Log for context, writes code."
+
+  architect:
+    role: "The Foreman (Core Smith)"
+    execution: "Containerized (Aider)"
+    launcher: "tools/bin/architect"
+    working_dir: "/repo"
+    access: "Read: Logs, Write: Plans"
+    description: "User-Operated. Interacts with Director via User Commands."
+
+communication:
+  radio:
+    path: ".mission-context/mission_log.md"
+    protocol: "File Tail / Stigmergy"
+    flow: "Director -> [REQ] -> LocalSmith -> [ACK] -> Director"
+  context:
+    path: ".mission-context/mission_log.md"
+    protocol: "Read-Only Context Load"
+    flow: "Director -> [Info] -> Coder/Architect"
+  handoff:
+    path: ".mission/memo.md"
+    protocol: "Human Handoff"
+    flow: "Human/Director -> [Memo] -> Coder"

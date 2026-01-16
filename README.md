@@ -5,9 +5,15 @@
 ## 🏗 Architecture
 The system uses a **Radio-based Communication Protocol** to bypass Docker network isolation without exposing ports.
 
-* **Director (Host):** Writes commands to a shared log file (`.mission-context/mission_log.md`).
+* **Director (Container):** Writes commands to a shared log file (`.mission-context/mission_log.md`).
 * **LocalSmith (Container):** Tails the log file, executes commands, and writes back ACKs.
 * **Radio (Shared Lib):** Handles atomic file I/O and absolute path resolution.
+
+## 📦 Deployment
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed setup instructions.
+
+*   **Supported Platforms**: Linux (AMD64), macOS (Intel & Apple Silicon/M1).
+*   **Apple Silicon**: The launcher automatically performs a **Native Bootstrap** to build an ARM64-optimized image, ensuring high performance and stability.
 
 ## 🚀 Quick Start
 ```
@@ -22,4 +28,4 @@ The system uses a **Radio-based Communication Protocol** to bypass Docker networ
 | Agent | Type | Role |
 |-------|------|------|
 | **LocalSmith** | Docker | Infrastructure Engineer. Can edit configs, manage files, and run shell verifications. |
-| **Director** | Host | Mission Control. Sends commands to agents. |
+| **Director** | Docker | Mission Control. Sends commands to agents. |
