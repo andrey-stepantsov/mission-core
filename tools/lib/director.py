@@ -1,119 +1,131 @@
-import time
 import os
 import sys
+import time
 import re
-from pathlib import Path
+import json
+from datetime import datetime
+from litellm import completion
 
-sys.stdout.reconfigure(line_buffering=True)
-sys.stderr.reconfigure(line_buffering=True)
+# --- Configuration ---
+LOG_FILE = os.environ.get("MISSION_JOURNAL", ".mission-context/mission_log.md")
+MODEL = os.environ.get("MODEL", "vertex_ai/gemini-1.5-pro")
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-LIB_DIR = os.path.join(os.path.dirname(CURRENT_DIR), "lib")
-sys.path.insert(0, LIB_DIR)
-import radio
+# Color Codes
+BLUE = "\033[1;34m"
+GREEN = "\033[1;32m"
+YELLOW = "\033[1;33m"
+RED = "\033[0;31m"
+RESET = "\033[0m"
 
-MODEL = os.environ.get("DIRECTOR_MODEL") or "vertex_ai/gemini-2.5-pro"
-POLL_INTERVAL = 1.0
-MY_NAME = "Director"
-
-SYSTEM_PROMPT = """You are the Strategic Director.
-Goal: Create a detailed technical plan based on the request.
-Output: STRICT MARKDOWN ONLY. Start with '# Plan: <Title>'.
-"""
-
-def get_log_path():
-    return radio.DEFAULT_LOG
-
-def parse_line(line):
-    match = re.search(r"### \[.*\] \[(.*) -> (.*)\] \[(.*)\]", line)
+def extract_timestamp(line):
+    match = re.search(r"\[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\]", line)
     if match:
-        return match.group(1), match.group(2), match.group(3)
-    return None, None, None
+        try:
+            return datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            return None
+    return None
 
-def generate_plan(request, sender):
-    print(f"🤔 Thinking... (Model: {MODEL})")
-    try:
-        import litellm
-    except ImportError:
-        return "Error: 'litellm' library not installed."
+def write_request(command):
+    now = datetime.now()
+    timestamp_str = now.strftime("%Y-%m-%dT%H:%M:%S")
+    entry = f"\n### [{timestamp_str}] [Director -> LocalSmith] [REQ] {command}\n"
+    
+    with open(LOG_FILE, "a") as f:
+        f.write(entry)
+    
+    print(f"{YELLOW}>> Signal Sent: {command}{RESET}")
+    return now
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Request from {sender}: {request}"}
-    ]
+def wait_for_ack(start_time):
+    print(f"{BLUE}... Waiting for LocalSmith (timeout: 45s) ...{RESET}")
+    start_time_seconds = start_time.timestamp()
+    
+    for _ in range(45):
+        if not os.path.exists(LOG_FILE):
+            time.sleep(1)
+            continue
+            
+        with open(LOG_FILE, "r") as f:
+            lines = f.readlines()
+            
+        for line in reversed(lines):
+            if "[LocalSmith -> Director]" in line and ("[ACK]" in line or "[ERR]" in line):
+                msg_time = extract_timestamp(line)
+                if msg_time and msg_time.timestamp() >= (start_time_seconds - 1):
+                    color = GREEN if "[ACK]" in line else RED
+                    print(f"{color}<< Signal Received: {line.strip()}{RESET}")
+                    return True
+        time.sleep(1)
+        
+    print(f"{RED}[!] Timeout waiting for ACK.{RESET}")
+    return False
+
+def get_llm_action(user_input, history):
+    system_prompt = """
+    You are the Mission Director. Control 'LocalSmith' via commands.
+    
+    Commands:
+    - `backup <file>`
+    - `set <key> to <value>`
+    - `run verification`
+    - `echo <message>`
+    
+    PROTOCOL INSTRUCTION:
+    To execute a command, your output must contain: CMD: <command>
+    Example: "I will run the check. CMD: run verification"
+    """
+    
+    messages = [{"role": "system", "content": system_prompt}] + history + [{"role": "user", "content": user_input}]
+    
     try:
-        response = litellm.completion(
-            model=MODEL, 
-            messages=messages,
-            timeout=15 
-        )
-        print("   [Debug] API Call Returned Success")
-        return response.choices[0].message.content
+        response = completion(model=MODEL, messages=messages)
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"   [Debug] API Call Failed: {e}")
-        return f"Plan Generation Failed: {e}"
+        return f"Error: {e}"
 
 def main():
-    if "--help" in sys.argv:
-        print(f"Director Agent (Model: {MODEL})")
-        sys.exit(0)
+    print(f"{GREEN}🤖 Director Online (v3: Robust Parsing){RESET}")
+    print(f"{BLUE}📡 Radio Frequency: {LOG_FILE}{RESET}")
+    print("---------------------------------------------------")
 
-    log_path = get_log_path()
-    print(f"👀 Director watching: {log_path}")
-    print(f"🤖 Active Model: {MODEL}")
-    
-    last_pos = 0
-    if os.path.exists(log_path):
-        last_pos = os.path.getsize(log_path)
+    history = []
 
     while True:
         try:
-            if os.path.exists(log_path):
-                current_size = os.path.getsize(log_path)
+            user_input = input("\nDirector> ")
+            if user_input.lower() in ["exit", "quit"]:
+                break
                 
-                if current_size > last_pos:
-                    with open(log_path, 'r') as f:
-                        f.seek(last_pos)
-                        new_lines = f.readlines()
-                        last_pos = f.tell()
-
-                    for line in new_lines:
-                        sender, recipient, msg_type = parse_line(line)
-                        if recipient == MY_NAME and msg_type == "REQ":
-                            print(f"⚡️ Activated by {sender}")
-                            plan_content = generate_plan("Analyze requirements", sender)
-                            
-                            # --- CORE SMITH RULE ENFORCEMENT ---
-                            # Plans must go to .mission-context, NOT .mission
-                            
-                            plan_name = f"plan_{int(time.time())}.md"
-                            
-                            # Resolve Repo Root (3 levels up from tools/lib)
-                            repo_root = Path(CURRENT_DIR).parent.parent.parent
-                            
-                            # Priority 1: .mission-context/plans
-                            plan_dir = repo_root / ".mission-context" / "plans"
-                            
-                            # Fallback: Current Dir/plans (if not installed as submodule)
-                            if not plan_dir.parent.exists():
-                                plan_dir = Path("plans")
-                                
-                            plan_dir.mkdir(parents=True, exist_ok=True)
-                            
-                            try:
-                                with open(plan_dir / plan_name, "w") as p:
-                                    p.write(plan_content)
-                                radio.append_entry(MY_NAME, sender, "ACK", f"Plan saved: {plan_dir}/{plan_name}")
-                            except Exception as e:
-                                radio.append_entry(MY_NAME, sender, "LOG", f"Write Error: {e}")
-                
-                elif current_size < last_pos:
-                    last_pos = 0
-                    
-        except Exception as e:
-            print(f"Error in loop: {e}")
+            response = get_llm_action(user_input, history)
             
-        time.sleep(POLL_INTERVAL)
+            # Regex to find CMD: anywhere in the response
+            match = re.search(r"CMD:\s*(.*)", response, re.IGNORECASE)
+            
+            if match:
+                # We found a command!
+                # If there was chat text before it, print that first
+                prefix = response[:match.start()].strip()
+                if prefix:
+                    print(prefix)
+                    
+                command = match.group(1).strip()
+                # Clean up any trailing quotes or periods if the LLM got messy
+                command = command.strip()
+                
+                request_time = write_request(command)
+                wait_for_ack(request_time)
+                
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": f"Executed: {command}"})
+            else:
+                print(f"{response}")
+                history.append({"role": "user", "content": user_input})
+                history.append({"role": "assistant", "content": response})
+                
+        except KeyboardInterrupt:
+            print("\n[!] Shutting down.")
+            break
 
 if __name__ == "__main__":
     main()

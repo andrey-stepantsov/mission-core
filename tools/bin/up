@@ -1,2 +1,59 @@
 #!/bin/bash
-exec $(dirname $0)/dash
+# Mission Launcher v4: Custom Director
+# Architecture: Unified Image, Python Orchestrator
+
+# --- Configuration ---
+REPO_ROOT=$(git rev-parse --show-toplevel)
+MISSION_ROOT="$REPO_ROOT/.mission"
+ENV_FILE="$REPO_ROOT/.env"
+IMG_NAME="aider-vertex:latest"
+
+# --- 1. Load Environment ---
+if [ -f "$ENV_FILE" ]; then
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+else
+    # Fallback generation if missing
+    echo "GOOGLE_CLOUD_REGION=us-central1" > "$ENV_FILE"
+fi
+
+# --- 2. Build Image (Fast) ---
+echo "🐳 Checking System..."
+docker build -t "$IMG_NAME" -f "$MISSION_ROOT/tools/Dockerfile" "$MISSION_ROOT/tools" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ Build failed. Check Docker."
+    exit 1
+fi
+
+# --- 3. Start LocalSmith (Background) ---
+CONTAINER_SMITH="localsmith_daemon"
+if ! docker ps | grep -q "$CONTAINER_SMITH"; then
+    echo "   [+] Awakening LocalSmith..."
+    docker run -d \
+        --name "$CONTAINER_SMITH" \
+        --rm \
+        -v "$REPO_ROOT:/repo" \
+        -e MISSION_JOURNAL="/repo/.mission-context/mission_log.md" \
+        -e PYTHONPATH="/repo/.mission/tools/lib" \
+        --entrypoint python3 \
+        "$IMG_NAME" \
+        "/repo/.mission/tools/lib/toolsmith_local.py" > /dev/null
+fi
+
+# --- 4. Start Director (Foreground) ---
+echo "🚀 Launching Director Interface..."
+echo "   - Log: .mission-context/mission_log.md"
+
+# Ensure log exists
+mkdir -p "$REPO_ROOT/.mission-context"
+touch "$REPO_ROOT/.mission-context/mission_log.md"
+
+docker run -it --rm \
+    --name director_brain \
+    -v "$REPO_ROOT:/repo" \
+    -v "$HOME/.config/gcloud:/root/.config/gcloud" \
+    --env-file "$ENV_FILE" \
+    -e GOOGLE_APPLICATION_CREDENTIALS="/root/.config/gcloud/application_default_credentials.json" \
+    -e PYTHONPATH="/repo/.mission/tools/lib" \
+    --entrypoint python3 \
+    "$IMG_NAME" \
+    "/repo/.mission/tools/lib/director.py"

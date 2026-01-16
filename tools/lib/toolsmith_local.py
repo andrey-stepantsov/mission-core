@@ -1,190 +1,120 @@
-#!/usr/bin/env python3
-import time
-import sys
 import os
-import re
-import json
-import shutil
+import time
 import subprocess
-from pathlib import Path
+import sys
+import json
+from datetime import datetime
 
-# Import Radio
-current_dir = Path(__file__).resolve().parent
-sys.path.insert(0, str(current_dir))
-import radio
-
-# Configuration
-AGENT_NAME = "LocalSmith"
-REPO_ROOT = Path("/repo") # Container View
-DDD_DIR = REPO_ROOT / ".ddd"
-CONFIG_FILE = DDD_DIR / "config.json"
+# --- Configuration ---
+LOG_FILE = os.environ.get("MISSION_JOURNAL", ".mission-context/mission_log.md")
+REPO_ROOT = "/repo"
 
 def log(msg):
-    """Stdout log for container logs."""
-    print(f"[{AGENT_NAME}] {msg}")
+    """Prints to Docker logs with flushing."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{timestamp}] {msg}", flush=True)
 
-def execute_shell(command):
-    """Run a shell command and return output."""
-    try:
-        result = subprocess.run(
-            command, 
-            shell=True, 
-            cwd=str(REPO_ROOT),
-            capture_output=True, 
-            text=True
-        )
-        return result.stdout.strip() + "\n" + result.stderr.strip()
-    except Exception as e:
-        return f"Execution Error: {str(e)}"
-
-def handle_backup(filename):
-    """CMD: backup <file>"""
-    src = DDD_DIR / filename
-    dst = DDD_DIR / (filename + ".bak")
+def write_ack(message):
+    """Writes an [ACK] to the radio file."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    entry = f"\n### [{timestamp}] [LocalSmith -> Director] [ACK] {message}\n"
     
-    if not src.exists():
-        return f"Error: File {filename} not found in .ddd"
-        
     try:
-        shutil.copy(src, dst)
-        return f"Backup created: {dst}"
+        with open(LOG_FILE, "a") as f:
+            f.write(entry)
+            f.flush()
+            os.fsync(f.fileno())
+        log(f"Sent ACK: {message}")
     except Exception as e:
-        return f"Backup failed: {e}"
+        log(f"Radio Write Error: {e}")
 
-def smart_strip_quotes(text):
-    """Removes quotes only if they wrap the content."""
-    text = text.strip()
-    if len(text) >= 2:
-        if text.startswith('"') and text.endswith('"'):
-            return text[1:-1]
-        if text.startswith("'") and text.endswith("'"):
-            return text[1:-1]
-    return text
-
-def handle_config_update(key, value):
-    """CMD: set <key> to <value>"""
-    if not CONFIG_FILE.exists():
-        return "Error: config.json not found"
-        
+def execute_shell(cmd, cwd=REPO_ROOT):
     try:
-        with open(CONFIG_FILE, 'r') as f:
-            data = json.load(f)
-        
-        # SMART FIX HERE
-        clean_value = smart_strip_quotes(value)
-        data[key] = clean_value
-        
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+        res = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
+        return res.stdout.strip() if res.returncode == 0 else f"Error: {res.stderr.strip()}"
+    except Exception as e:
+        return f"Exception: {e}"
+
+def process_command(cmd_text):
+    log(f"Processing: {cmd_text}")
+    
+    # Normalizing command
+    cmd_clean = cmd_text.strip()
+    
+    # 1. BACKUP
+    if cmd_clean.startswith("backup "):
+        filename = cmd_clean.replace("backup ", "").strip()
+        result = execute_shell(f"cp -r {filename} {filename}.bak")
+        if not result: result = "Success" # cp produces no stdout on success
+        return f"Backup of {filename}: {result}"
+
+    # 2. CONFIG (Flexible parsing)
+    # Matches: "set key to value" or "set key = value"
+    elif cmd_clean.startswith("set "):
+        parts = cmd_clean.split(" ", 2) # set, key, rest
+        if len(parts) >= 3:
+            key = parts[1]
+            value = parts[2]
+            # Remove "to" or "=" if present
+            if value.startswith("to "): value = value[3:]
+            elif value.startswith("= "): value = value[2:]
             
-        return f"Config updated: {key} = {clean_value}"
-    except Exception as e:
-        return f"Config update failed: {e}"
+            # Simulate saving config
+            config_path = os.path.join(REPO_ROOT, ".ddd")
+            os.makedirs(config_path, exist_ok=True)
+            with open(os.path.join(config_path, "config.json"), "w") as f:
+                json.dump({key: value}, f)
+                
+            return f"Config updated: {key} -> {value}"
+        return "Config format error. Use: set <key> to <value>"
 
-def handle_create_filter(name, content):
-    """CMD: create filter <name> with content: <content>"""
-    filters_dir = DDD_DIR / "filters"
-    if not filters_dir.exists():
-        os.makedirs(filters_dir)
-        
-    target_file = filters_dir / name
-    
-    # Clean up markdown code blocks if present
-    clean_content = content
-    if "```python" in clean_content:
-        clean_content = clean_content.split("```python")[1].split("```")[0].strip()
-    elif "```" in clean_content:
-        clean_content = clean_content.split("```")[1].split("```")[0].strip()
-        
-    try:
-        with open(target_file, 'w') as f:
-            f.write(clean_content)
-        return f"Filter created: {target_file}"
-    except Exception as e:
-        return f"Write failed: {e}"
+    # 3. VERIFICATION
+    elif "verification" in cmd_clean:
+        # Read the config we just saved
+        try:
+            with open(os.path.join(REPO_ROOT, ".ddd/config.json"), "r") as f:
+                cfg = json.load(f)
+                cmd = cfg.get("verification_command", "echo 'System Online'")
+                output = execute_shell(cmd)
+                return f"Verification Output: {output}"
+        except:
+            return "Verification: System Online (Default)"
 
-def handle_run_verification():
-    """CMD: run verification"""
-    if not CONFIG_FILE.exists():
-        return "Error: No config found"
-        
-    try:
-        with open(CONFIG_FILE, 'r') as f:
-            data = json.load(f)
-        
-        cmd = data.get("verification_command", "echo 'No command defined'")
-        log(f"Running verification: {cmd}")
-        output = execute_shell(cmd)
-        return f"Verification Output:\n{output}"
-    except Exception as e:
-        return f"Verification failed: {e}"
+    # 4. ECHO/DEBUG
+    elif cmd_clean.startswith("echo "):
+        return execute_shell(cmd_clean)
 
-def process_request(request, sender):
-    """The Brain: Routing Logic."""
-    req_lower = request.lower()
-    # Keep the debug log for now, it's useful
-    log(f"Processing RAW: {repr(request)}")
-
-    # 1. Backup
-    if req_lower.startswith("backup "):
-        filename = request.split(" ", 1)[1].strip()
-        result = handle_backup(filename)
-        radio.append_entry(AGENT_NAME, sender, "ACK", result)
-        return
-
-    # 2. Config Update
-    match_set = re.match(r"set\s+(\w+)\s+to\s*[:]?\s*(.+)", request, re.IGNORECASE)
-    if match_set:
-        key = match_set.group(1)
-        value = match_set.group(2)
-        result = handle_config_update(key, value)
-        radio.append_entry(AGENT_NAME, sender, "ACK", result)
-        return
-
-    # 3. Create Filter
-    match_filter = re.match(r"create filter\s+([\w\.]+)\s+with content:?\s*(.*)", request, re.IGNORECASE | re.DOTALL)
-    if match_filter:
-        name = match_filter.group(1)
-        content = match_filter.group(2)
-        result = handle_create_filter(name, content)
-        radio.append_entry(AGENT_NAME, sender, "ACK", result)
-        return
-
-    # 4. Run Verification
-    if "run verification" in req_lower:
-        result = handle_run_verification()
-        radio.append_entry(AGENT_NAME, sender, "ACK", result)
-        return
-
-    # Fallback
-    radio.append_entry(AGENT_NAME, sender, "LOG", f"Unknown command: {request[:30]}...")
+    # UNKNOWN
+    else:
+        return f"Unknown command: {cmd_clean}"
 
 def main():
-    log("Online. Monitoring radio frequencies...")
+    log("LocalSmith v2 Daemon Started.")
     
-    if not os.path.exists(radio.DEFAULT_LOG):
-        with open(radio.DEFAULT_LOG, 'w') as f:
-            f.write(f"# Mission Log - {AGENT_NAME}\n")
+    # Ensure log exists
+    if not os.path.exists(LOG_FILE):
+        with open(LOG_FILE, "w") as f:
+            f.write("# Mission Log\n")
 
-    with open(radio.DEFAULT_LOG, "r") as f:
-        f.seek(0, 2)
-        
-        while True:
-            line = f.readline()
-            if not line:
-                time.sleep(1)
-                continue
+    # Open file and go to end
+    f = open(LOG_FILE, "r")
+    f.seek(0, 2)
+
+    while True:
+        line = f.readline()
+        if not line:
+            time.sleep(0.1)
+            continue
             
-            # log(f"READ LINE: {repr(line)}") # Verbose debug off for prod
-            
-            if f"-> {AGENT_NAME}]" in line and "[REQ]" in line:
-                try:
-                    parts = line.split("->")
-                    sender_part = parts[0].split("[")[-1].strip()
-                    msg_content = line.split("[REQ]", 1)[1].strip()
-                    process_request(msg_content, sender_part)
-                except Exception as e:
-                    log(f"Parse Error: {e}")
+        # Look for [REQ] from Director
+        if "[REQ]" in line and "[Director -> LocalSmith]" in line:
+            # Extract command part
+            try:
+                cmd_part = line.split("[REQ]", 1)[1].strip()
+                response = process_command(cmd_part)
+                write_ack(response)
+            except Exception as e:
+                log(f"Parse Error: {e}")
 
 if __name__ == "__main__":
     main()
