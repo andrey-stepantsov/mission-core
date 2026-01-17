@@ -29,42 +29,14 @@ fi
 # --- 2. Build Image (Fast) ---
 echo "🐳 Checking System..."
 
-ensure_base_image() {
-    if docker image inspect "$BASE_IMG" > /dev/null 2>&1; then
-        return 0
-    fi
+# --- 2. Build Image (Fast) ---
+echo "🐳 Checking System..."
 
-    echo "⚠️  Base image '$BASE_IMG' not found."
-    ARCH=$(uname -m)
+# Source Shared Bootstrap
+source "$MISSION_ROOT/tools/lib/image_bootstrap.sh"
 
-    if [[ "$ARCH" == "arm64" ]] || [[ "$ARCH" == "aarch64" ]]; then
-        echo "🍎 Apple Silicon / ARM64 Detected."
-        echo "🛠  Initiating Nix Bootstrap (Native Build)..."
-        echo "   (This may take a few minutes, but solves emulation crashes)"
-        
-        # The M1 Bootstrap "Different Path"
-        docker run --rm \
-            --platform linux/arm64 \
-            -v "$(pwd)/.mission:/app" -w /app \
-            nixos/nix \
-            bash -c "nix --extra-experimental-features 'nix-command flakes' build $UPSTREAM_REPO > /dev/null && cat result" > /tmp/aider-vertex.tar.gz
-            
-            
-        if [ $? -eq 0 ]; then
-            echo "📥 Loading Native Image..."
-            docker load < /tmp/aider-vertex.tar.gz
-            rm /tmp/aider-vertex.tar.gz
-        else
-            echo "❌ Bootstrap Failed."
-            exit 1
-        fi
-    else
-        echo "💻 x86_64 Detected."
-        echo "   Please pull the image: docker pull $BASE_IMAGE_REGISTRY"
-        echo "   Or tag your local build."
-        exit 1
-    fi
-}
+# Run the check
+ensure_base_image
 
 # Run the check
 ensure_base_image

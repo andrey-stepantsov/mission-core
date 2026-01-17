@@ -72,14 +72,14 @@ class TestSwarmIntegration(unittest.TestCase):
         # 1. Start Local Smith
         self.start_agent("LocalSmith", LOCALSMITH_BIN)
         
-        # 2. User -> LocalSmith
-        radio.append_entry("User", "LocalSmith", "REQ", "Integration Ping")
+        # 2. Director -> LocalSmith (Agent only listens to Director)
+        radio.append_entry("Director", "LocalSmith", "REQ", "Integration Ping")
         
-        # 3. Expect LocalSmith -> User (ACK or LOG)
+        # 3. Expect LocalSmith -> Director (ACK or LOG)
         # Note: It might reply LOG if verification fails, or ACK if simulated.
         # We check for either to be robust.
-        success_ack = self.wait_for_log("LocalSmith", "User", "ACK", timeout=15)
-        success_log = self.wait_for_log("LocalSmith", "User", "LOG", timeout=1)
+        success_ack = self.wait_for_log("LocalSmith", "Director", "ACK", timeout=15)
+        success_log = self.wait_for_log("LocalSmith", "Director", "LOG", timeout=1)
         
         self.assertTrue(success_ack or success_log, "LocalSmith did not reply!")
 

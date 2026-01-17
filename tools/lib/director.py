@@ -89,6 +89,11 @@ def main():
     print(f"{BLUE}📡 Radio Frequency: {LOG_FILE}{RESET}")
     print("---------------------------------------------------")
 
+    # Arg check for speed test
+    if len(sys.argv) > 1 and sys.argv[1] in ["--help", "-h"]:
+        print("Usage: director")
+        sys.exit(0)
+
     history = []
 
     while True:

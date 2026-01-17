@@ -15,6 +15,16 @@ echo "======================================"
 
 EXIT_CODE=0
 
+# --- 0. Infrastructure Check ---
+echo -n "[Base] Verifying Docker Environment... "
+if bash "$TEST_DIR/test_docker_build.sh" > /dev/null 2>&1; then
+    echo -e "${GREEN}PASSED${NC}"
+else
+    echo -e "${RED}FAILED${NC} (Check Logs)"
+    # bash "$TEST_DIR/test_docker_build.sh" # Uncomment for debug
+    EXIT_CODE=1
+fi
+
 # --- 1. Host Radio ---
 echo -n "[Host] Testing Radio Logic... "
 if python3 "$TEST_DIR/test_radio.py" > /dev/null 2>&1; then
@@ -67,9 +77,9 @@ echo -n "[Scenario] Testing Configuration Lifecycle... "
 if python3 "$TEST_DIR/test_scenario_config_flow.py" > /dev/null 2>&1; then
      echo -e "${GREEN}PASSED${NC}"
 else
-     echo -e "${RED}FAILED${NC} (As Expected)"
-     # No verbose output here to keep the summary clean, 
-     # but we mark exit code as 1 to signal work is needed.
+     echo -e "${RED}FAILED${NC}"
+     # Re-run to show output
+     python3 "$TEST_DIR/test_scenario_config_flow.py"
      EXIT_CODE=1
 fi
 
