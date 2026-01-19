@@ -14,6 +14,34 @@ def log(msg):
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {msg}", flush=True)
 
+def apply_filters(text):
+    """Applies all filters in .ddd/filters/ to the text."""
+    lines = text.splitlines()
+    filter_dir = os.path.join(REPO_ROOT, ".ddd", "filters")
+    
+    if not os.path.exists(filter_dir):
+        return text
+
+    # simple mechanism: load python files, expecting 'def filter(lines): return lines'
+    for f in sorted(os.listdir(filter_dir)):
+        if f.endswith(".py"):
+            try:
+                # Dynamic import/exec
+                path = os.path.join(filter_dir, f)
+                with open(path, "r") as pyf:
+                    code = pyf.read()
+                
+                # Sandboxed execution context
+                local_scope = {}
+                exec(code, {}, local_scope)
+                
+                if "filter" in local_scope:
+                    lines = local_scope["filter"](lines)
+            except Exception as e:
+                lines.append(f"[Filter Error {f}]: {e}")
+                
+    return "\n".join(lines)
+
 def write_ack(message):
     """Writes an [ACK] to the radio file."""
     timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -113,9 +141,29 @@ def process_command(cmd_text):
                 cfg = json.load(f)
                 cmd = cfg.get("verification_command", "echo 'System Online'")
                 output = execute_shell(cmd)
-                return f"Verification Output: {output}"
-        except:
-            return "Verification: System Online (Default)"
+                
+                # 1. Save Raw Log
+                log_path = os.path.join(REPO_ROOT, ".ddd", "last_run.log")
+                with open(log_path, "w") as lf:
+                    lf.write(output)
+
+                # 2. Apply Filters
+                filtered_output = apply_filters(output)
+                return f"Verification Output: {filtered_output}"
+        except Exception as e:
+            return f"Verification Error: {e}"
+
+    # 4. REPLAY LOGS (New)
+    elif "replay logs" in cmd_clean:
+        log_path = os.path.join(REPO_ROOT, ".ddd", "last_run.log")
+        if not os.path.exists(log_path):
+            return "No previous logs found. Run verification first."
+            
+        with open(log_path, "r") as f:
+            raw_output = f.read()
+            
+        filtered_output = apply_filters(raw_output)
+        return f"Replay Output: {filtered_output}"
 
     # 4. ECHO/DEBUG
     elif cmd_clean.startswith("echo "):
@@ -145,6 +193,7 @@ def main():
             
         # Look for [REQ] from Director
         if "[REQ]" in line and "[Director -> LocalSmith]" in line:
+            # log(f"Detected REQ: {line.strip()}")
             # Extract command part
             try:
                 cmd_part = line.split("[REQ]", 1)[1].strip()

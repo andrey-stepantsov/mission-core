@@ -56,11 +56,13 @@ class TestConfigFlow(unittest.TestCase):
     def tearDown(self):
         print("\n[Teardown] Killing agents...")
         for p in self.processes:
-            p.terminate()
-            try:
-                p.wait(timeout=1)
-            except:
-                p.kill()
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
         subprocess.run("docker ps -q --filter 'ancestor=aider-vertex' | xargs -r docker kill", shell=True, stderr=subprocess.DEVNULL)
         
         if CONFIG_BAK.exists():
@@ -78,7 +80,7 @@ class TestConfigFlow(unittest.TestCase):
             text=True
         )
         self.processes.append(p)
-        time.sleep(3) 
+        time.sleep(5)  # Increased from 3s to 5s to allow Docker startup
         return p
 
     def wait_for_ack(self, sender, recipient, match_text=None, timeout=15):

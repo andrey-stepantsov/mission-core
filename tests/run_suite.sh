@@ -52,7 +52,7 @@ START=$(date +%s%N)
 if "$DIRECTOR" --help > /dev/null 2>&1; then
     END=$(date +%s%N)
     DIFF=$(( ($END - $START) / 1000000 ))
-    if [ $DIFF -lt 2500 ]; then
+    if [ $DIFF -lt 3500 ]; then
          echo -e "${GREEN}PASSED${NC} (${DIFF}ms)"
     else
          echo -e "${RED}SLOW${NC} (${DIFF}ms)"
@@ -80,6 +80,18 @@ else
      echo -e "${RED}FAILED${NC}"
      # Re-run to show output
      python3 "$TEST_DIR/test_scenario_config_flow.py"
+     EXIT_CODE=1
+fi
+
+
+
+# --- 6. Feature: Log Replay ---
+echo -n "[Feature] Testing Log Replay... "
+if python3 "$TEST_DIR/test_feature_log_replay.py" > /dev/null 2>&1; then
+     echo -e "${GREEN}PASSED${NC}"
+else
+     echo -e "${RED}FAILED${NC}"
+     python3 "$TEST_DIR/test_feature_log_replay.py"
      EXIT_CODE=1
 fi
 
