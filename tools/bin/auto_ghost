@@ -1,3 +1,123 @@
-#!/bin/bash
-# Stub: No external mounts for now
-echo "" 
+#!/usr/bin/env python3
+import sys
+import os
+import subprocess
+import json
+import re
+from pathlib import Path
+
+# --- Scanner Logic ---
+
+class DependencyScanner:
+    def __init__(self, include_paths, repo_root, max_depth=16):
+        self.include_paths = [Path(p).resolve() for p in include_paths]
+        self.repo_root = Path(repo_root).resolve()
+        self.max_depth = max_depth
+        self.visited = set()
+        self.dependencies = set()
+        self.cache = {} # path -> list of includes
+
+    def find_header(self, header_name, current_file_path):
+        """Resolves a header name to an absolute path."""
+        # 1. Check relative to current file (for quoted includes)
+        current_dir = Path(current_file_path).parent
+        candidate = (current_dir / header_name).resolve()
+        if candidate.exists():
+            return candidate
+
+        # 2. Check include paths (for <angled> and "quoted")
+        for inc_path in self.include_paths:
+            candidate = (inc_path / header_name).resolve()
+            if candidate.exists():
+                return candidate
+        
+        return None
+
+    def scan_file(self, file_path, depth=0):
+        """Recursively scans a file for #include directives."""
+        abs_path = Path(file_path).resolve()
+        
+        if abs_path in self.visited:
+            return
+        
+        self.visited.add(abs_path)
+        
+        if depth > self.max_depth:
+            return
+
+        # Add to dependencies if it's not the root file (which starts at depth 0)
+        # Actually, we want to return ALL dependencies. The root file is the input.
+        # We record found dependencies.
+        if depth > 0:
+            self.dependencies.add(str(abs_path))
+
+        # Read file content
+        try:
+            content = abs_path.read_text(errors='ignore')
+        except Exception as e:
+            # If we can't read it (e.g. permission), we can't scan it.
+            # But we still record it as a dependency since we found it.
+            return
+
+        # Regex for includes: #include <...> or #include "..."
+        # We handle simple cases. Comments are ignored by regex widely, but valid C parser is better.
+        # For simplicity/speed: regex.
+        # This matches: #include <file> or #include "file"
+        includes = re.findall(r'^\s*#\s*include\s+["<]([^">]+)[">]', content, re.MULTILINE)
+
+        for header_name in includes:
+            resolved_path = self.find_header(header_name, abs_path)
+            if resolved_path:
+                self.scan_file(resolved_path, depth + 1)
+
+# --- Main Script ---
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: auto_ghost <target_file>", file=sys.stderr)
+        sys.exit(1)
+
+    target_file = sys.argv[1]
+    repo_root = os.getcwd() # Assume run from repo root or correct CWD
+    
+    # Locate c_context binary
+    script_dir = Path(os.path.dirname(os.path.realpath(__file__)))
+    c_context_bin = script_dir / "c_context"
+    
+    if not c_context_bin.exists():
+        print(f"Error: c_context binary not found at {c_context_bin}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        # Step 1: Get Context (Include Paths)
+        cmd = [str(c_context_bin), target_file]
+        # Capture stdout for data, let stderr flow through to user (for bootstrap messages)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
+        
+        context_data = json.loads(result.stdout)
+        
+        # Even if not found in DB, we continue to scan for relative includes
+        include_paths = context_data.get("includes", [])
+        
+        # Step 2: recursive scan
+        scanner = DependencyScanner(include_paths, repo_root)
+        scanner.scan_file(target_file)
+        
+        # Step 3: Output unique list
+        # We only output files that exist on disk.
+        # Sort for determinism.
+        sorted_deps = sorted(list(scanner.dependencies))
+        
+        print(json.dumps(sorted_deps, indent=2))
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Error running c_context: {e}", file=sys.stderr)
+        print(json.dumps([]))
+        sys.exit(0)
+    except json.JSONDecodeError:
+        print(f"Error parsing c_context output", file=sys.stderr)
+        print(json.dumps([]))
+        sys.exit(0)
+
+if __name__ == "__main__":
+    main()

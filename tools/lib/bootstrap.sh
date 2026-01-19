@@ -9,7 +9,7 @@ REQ_FILE="$TOOLS_ROOT/requirements.txt"
 
 # 1. Create Venv if missing
 if [ ! -d "$VENV_DIR" ]; then
-    printf "📦 Bootstrapping Python Environment...\n"
+    printf "📦 Bootstrapping Python Environment...\n" >&2
     # Try system site-packages first (Docker optimization)
     python3 -m venv --system-site-packages "$VENV_DIR" || python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/pip" install --upgrade pip > /dev/null
@@ -20,7 +20,7 @@ HASH_FILE="$VENV_DIR/.req_hash"
 if [ -f "$REQ_FILE" ]; then
     CURRENT_HASH=$(shasum "$REQ_FILE" 2>/dev/null || md5sum "$REQ_FILE" | awk '{print $1}')
     if [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$CURRENT_HASH" ]; then
-        printf "📦 Syncing Universal Dependencies...\n"
+        printf "📦 Syncing Universal Dependencies...\n" >&2
         "$VENV_DIR/bin/pip" install -r "$REQ_FILE" > /dev/null
         echo "$CURRENT_HASH" > "$HASH_FILE"
     fi
