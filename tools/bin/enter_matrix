@@ -1,0 +1,39 @@
+#!/bin/bash
+set -e
+
+# The Matrix: Simulation Harness
+# Launches the 'mission-host' and 'mission-client' stack and drops you into the client.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOLS_DIR="$(dirname "$SCRIPT_DIR")"
+SIM_DIR="$TOOLS_DIR/simulation"
+
+# 1. Launch Stack
+echo "💊 Entering The Matrix..."
+cd "$SIM_DIR"
+docker compose up -d --build
+
+# 2. Key Exchange (Simulating "Setup")
+echo "🔑 exchanging keys..."
+CLIENT_CONTAINER="mission-client"
+HOST_CONTAINER="mission-host"
+
+# Wait for containers
+sleep 3
+
+# Generate key in client if missing
+docker exec -u client $CLIENT_CONTAINER bash -c "[ -f ~/.ssh/id_rsa ] || ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa"
+
+# Get Public Key
+PUBKEY=$(docker exec -u client $CLIENT_CONTAINER cat ~/.ssh/id_rsa.pub)
+
+# Push to Host
+docker exec $HOST_CONTAINER bash -c "mkdir -p /home/mission/.ssh && echo '$PUBKEY' >> /home/mission/.ssh/authorized_keys && chown mission:mission /home/mission/.ssh/authorized_keys"
+
+# 3. Enter Client
+echo "🟢 Matrix Loaded. You are now 'client' on the laptop."
+echo "   Target Host: mission-host (user: mission)"
+echo "   Try: ssh mission@mission-host 'ls -la'"
+echo ""
+
+docker exec -it -u client $CLIENT_CONTAINER bash

@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # 1. The Legacy Host ("Server")
+  mission-host:
+    image: ubuntu:22.04
+    container_name: mission-host
+    hostname: mission-host
+    command: /usr/sbin/sshd -D
+    ports:
+      - "2222:22" # Allow local SSH if needed
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+    volumes:
+      - ./setup_host.sh:/entrypoint-init/setup.sh
+      - ../../:/mission:ro # Mount tools read-only for setup usage
+    # We install SSH and build tools to simulate a legacy dev server
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ubuntu:22.04
+        RUN apt-get update && apt-get install -y openssh-server rsync git build-essential vim tmux python3 sudo
+        RUN mkdir /var/run/sshd
+        # User 'mission' with password 'mission'
+        RUN useradd -m -s /bin/bash mission && echo "mission:mission" | chpasswd
+        RUN echo "mission ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+        # SSH Keys setup (allow key auth)
+        RUN mkdir -p /home/mission/.ssh && chmod 700 /home/mission/.ssh && chown mission:mission /home/mission/.ssh
+    healthcheck:
+      test: ["CMD", "service", "ssh", "status"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+
+  # 2. The Client ("Laptop")
+  mission-client:
+    image: python:3.11-slim
+    container_name: mission-client
+    hostname: mission-client
+    command: tail -f /dev/null # Keep alive
+    depends_on:
+      - mission-host
+    environment:
+      - MISSION_HOST=mission-host
+    volumes:
+      # Mount the Mission Pack source so we can develop tools locally
+      - ../../:/mission:z 
+    working_dir: /mission
+    # Install client tools (ssh, rsync)
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        RUN apt-get update && apt-get install -y openssh-client rsync git vim tmux
+        RUN useradd -m -s /bin/bash client
