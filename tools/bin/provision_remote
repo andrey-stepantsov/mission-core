@@ -1,76 +1,78 @@
 #!/bin/bash
 set -e
 
-# Usage: ./provision_remote <user@host> [remote_root]
-TARGET=$1
-REMOTE_ROOT=${2:-"/repos/chaos"}
+# Defaults
+USER="oracle"
+HOST="mission-host" 
+REMOTE_ROOT="/repos/projects/project0"
 
-if [ -z "$TARGET" ]; then
-    echo "Usage: $0 <user@host> [remote_root]"
-    exit 1
+# Parse Args
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -u|--user) USER="$2"; shift ;;
+        -d|--dir|--mount-dir|--remote-root) REMOTE_ROOT="$2"; shift ;;
+        -h|--host) HOST="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+echo "🚀 Configuring Simulated Remote Host: $HOST"
+echo "   User: $USER"
+echo "   Remote Root: $REMOTE_ROOT"
+
+# 1. SSH Key Setup (The Authentication)
+echo "🔑 Setting up SSH authentication..."
+if [ ! -f ~/.ssh/id_rsa ]; then
+    echo "   Generating authentication keypair..."
+    ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ""
+fi
+PUBKEY=$(cat ~/.ssh/id_rsa.pub)
+
+echo "   Injecting authorized_key into container ($HOST)..."
+docker exec "$HOST" bash -c "mkdir -p /home/$USER/.ssh && echo '$PUBKEY' >> /home/$USER/.ssh/authorized_keys && chown $USER:$USER /home/$USER/.ssh/authorized_keys && chmod 600 /home/$USER/.ssh/authorized_keys"
+
+# 2. SSH Config Alias
+echo "🔌 Verifying SSH connectivity..."
+ALIAS_NAME="mission-sim"
+if ! grep -q "Host $ALIAS_NAME" ~/.ssh/config; then
+    echo "   Adding '$ALIAS_NAME' alias to ~/.ssh/config..."
+    cat >> ~/.ssh/config <<EOF
+
+Host $ALIAS_NAME
+    HostName localhost
+    User $USER
+    Port 2222
+    IdentityFile ~/.ssh/id_rsa
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+EOF
+else
+    echo "   SSH config alias '$ALIAS_NAME' already exists."
 fi
 
-echo "🚀 Provisioning $TARGET at $REMOTE_ROOT..."
+# 3. Sync Tools & Launch Tower (The Persistent Brain)
+echo "🧠 Provisioning & Launching Tower..."
+# Note: We assume the host is already setup via setup_realistic_host.sh regarding directory structure.
+# But we need to make sure the user has access to the tools.
+# sync tools again just in case? setup_realistic_host.sh does it. 
+# But let's assume this script might be run independently.
 
-# 1. Create Directories & Git Init
-echo "   📂 Preparing directory structure..."
-ssh -o StrictHostKeyChecking=no "$TARGET" "
-    mkdir -p $REMOTE_ROOT
-    cd $REMOTE_ROOT
-    if [ ! -d .git ]; then git init; echo '# Provisioned Project' > README.md; fi
-"
+SCRIPT_DIR="$(dirname "$0")"
+MISSION_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)" 
 
-# 2. Side-Load Mission
-echo "   🔧 Installing Mission Toolchain..."
-ssh -o StrictHostKeyChecking=no "$TARGET" "
-    cd $REMOTE_ROOT
-    if [ ! -d .mission ]; then 
-        git clone git@github.com:andrey-stepantsov/mission-core.git .mission
-    else
-        cd .mission && git pull
-    fi
-    # Checkout the branch with fixes
-    cd .mission && git checkout diag/remote-test
-"
+# Deploy tools to user home for consistent access (if not already there)
+rsync -az -e "ssh" \
+    --exclude '.git' \
+    --exclude 'logs' \
+    "$MISSION_ROOT/.mission/" \
+    "$ALIAS_NAME:/home/$USER/.mission/"
 
-# 3. Install DDD
-echo "   🏗  Installing DDD (Dead Drop Daemon)..."
-ssh -o StrictHostKeyChecking=no "$TARGET" "
-    cd $REMOTE_ROOT
-    rm -rf .mission/tools/ddd 2>/dev/null
-    git clone https://github.com/andrey-stepantsov/ddd .mission/tools/ddd
-    
-    mkdir -p .ddd/run
-"
+# Launch Tower if not running
+echo "   Checking/Launching Tower..."
+ssh $ALIAS_NAME "tmux has-session -t mission_tower 2>/dev/null || tmux new-session -d -s mission_tower '/home/$USER/.mission/tools/bin/launch_tower'"
 
-# 4. Configure DDD
-echo "   ⚙️  Configuring DDD..."
-# We interpret the JSON in the here-doc locally, so we escape quotes carefully or use single quotes for the whole block
-ssh -o StrictHostKeyChecking=no "$TARGET" "
-    cd $REMOTE_ROOT
-    cat > .ddd/config.json <<EOF
-{
-  \"targets\": {
-    \"dev\": {
-      \"build\": {
-        \"cmd\": \"make\",
-        \"filter\": [\"raw\"]
-      }
-    }
-  }
-}
-EOF
-    # Dummy Makefile for testing
-    echo \"all:; @echo 'Simulated Build Success'\" > Makefile
-"
-
-    # 5. Bootstrap & Verify
-echo "   ✅ Verifying Environment..."
-ssh -o StrictHostKeyChecking=no "$TARGET" "
-    cd $REMOTE_ROOT
-    chmod +x .mission/bin/remote-test.sh
-    .mission/bin/remote-test.sh
-"
-
-echo "✨ Provisioning Complete! You can now run:"
-echo "   .mission/tools/bin/projector init $TARGET --remote-root $REMOTE_ROOT"
+echo "✅ Configuration Complete!"
+echo "   You can now initialize a project:"
+echo "   Tools: $SCRIPT_DIR/projector"
+echo "   Command: $SCRIPT_DIR/projector init $ALIAS_NAME --remote-root $REMOTE_ROOT"
