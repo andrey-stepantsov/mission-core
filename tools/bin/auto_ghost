@@ -103,6 +103,7 @@ def main():
     parser.add_argument("--format", choices=["json", "docker"], default="json", help="Output format")
     
     parser.add_argument("--mode", choices=["auto", "compiler", "scanner"], default="auto", help="Dependency scanning strategy")
+    parser.add_argument("--full", action="store_true", help="Return full context including compile commands")
     
     args = parser.parse_args()
     
@@ -111,6 +112,7 @@ def main():
     tools_root = script_dir.parent
     
     all_files = set()
+    compile_context = None
 
     # Strategy 1: Target File
     if args.target_file:
@@ -126,6 +128,14 @@ def main():
                 result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
                 context_data = json.loads(result.stdout)
                 include_paths = context_data.get("includes", [])
+                
+                # Capture context for full output
+                if args.full:
+                    compile_context = {
+                        "directory": context_data.get("directory"),
+                        "arguments": context_data.get("arguments"),
+                        "file": str(target_file)
+                    }
                 
                 scan_success = False
 
@@ -199,7 +209,14 @@ def main():
     sorted_files = sorted(list(all_files))
     
     if args.format == "json":
-        print(json.dumps(sorted_files, indent=2))
+        if args.full:
+            output = {
+                "dependencies": sorted_files,
+                "compile_context": compile_context
+            }
+            print(json.dumps(output, indent=2))
+        else:
+            print(json.dumps(sorted_files, indent=2))
         
     elif args.format == "docker":
         # -v /abs:/abs:ro
