@@ -36,4 +36,8 @@ This script:
 2.  Deploys `chaos.py`, `launch_tower`, and `dd-daemon`.
 3.  Generates the "Project0" codebase with real C++ sources.
 4.  Plants the `Makefile` shim.
-5.  Compiles the initial build to verify health.
+## Dependency Insight
+To enable accurate dependency discovery for "Auto-Ghost", the environment includes:
+1.  **Bear**: A tool to generate a compilation database (`compile_commands.json`) from the build process. The `Makefile` usage is wrapped to automatically invoke `bear`.
+2.  **Auto-Ghost**: A custom tool that leverages the compilation database to run `gcc -M` on source files, extracting the precise list of header dependencies (both project-local and system-level) to be synced to the client's "Outside Wall".
+

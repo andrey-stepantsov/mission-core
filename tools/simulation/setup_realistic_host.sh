@@ -142,7 +142,7 @@ ssh $HOST "chmod +x $PROJECT_ROOT/mk"
 # Makefile (Bridge for vanilla DD-Daemon)
 ssh $HOST "cat > $PROJECT_ROOT/Makefile" <<EOF
 all:
-	@./mk
+	@if command -v bear >/dev/null 2>&1; then bear -- ./mk; else ./mk; fi
 EOF
 
 
