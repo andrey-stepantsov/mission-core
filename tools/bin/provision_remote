@@ -21,10 +21,13 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
+MISSION_DIR="$REMOTE_ROOT/.mission"
+
 echo "🚀 Configuring Remote Host: $ALIAS"
 echo "   Host: $HOST ($PORT)"
 echo "   User: $USER"
 echo "   Remote Root: $REMOTE_ROOT"
+echo "   Mission Dir: $MISSION_DIR"
 
 # 1. SSH Key Setup (The Authentication)
 echo "🔑 Setting up SSH authentication..."
@@ -44,7 +47,8 @@ if [ "$HOST" == "mission-host" ]; then
 else
     # Real Host Best Effort
     echo "   Attempting ssh-copy-id (You may be prompted for password)..."
-    ssh-copy-id -p $PORT -i ~/.ssh/id_rsa.pub $USER@$HOST || echo "⚠️  ssh-copy-id failed. Ensure you can access $USER@$HOST manually."
+    # We suppress output if successful, but show if it fails (which is fine if key exists)
+    ssh-copy-id -p $PORT -i ~/.ssh/id_rsa.pub $USER@$HOST 2>/dev/null || echo "   (ssh-copy-id skipped or failed, assuming access exists)"
 fi
 
 # 2. SSH Config Alias
@@ -66,37 +70,40 @@ else
     echo "   SSH config alias '$ALIAS_NAME' already exists."
 fi
 
-# 3. Provisioning (User Space Only)
+# 3. Provisioning (Project Space Only)
 echo "🧠 Provisioning & Launching Tower..."
+
+# Ensure Remote Root Exists
+ssh $ALIAS_NAME "mkdir -p $REMOTE_ROOT"
 
 # Deploy Mission Tools via Git
 echo "   Deploying Mission Tools via Git..."
 BRANCH=$(git branch --show-current)
 REPO_URL="https://github.com/andrey-stepantsov/mission-core"
 
-ssh $ALIAS_NAME "if [ -d /home/$USER/.mission/.git ]; then
+ssh $ALIAS_NAME "if [ -d $MISSION_DIR/.git ]; then
     echo '   Updating existing .mission repo...'
-    cd /home/$USER/.mission && git fetch origin && git checkout $BRANCH && git pull origin $BRANCH
+    cd $MISSION_DIR && git fetch origin && git checkout $BRANCH && git pull origin $BRANCH
 else
     echo '   Cloning .mission repo...'
-    git clone -b $BRANCH $REPO_URL /home/$USER/.mission
+    git clone -b $BRANCH $REPO_URL $MISSION_DIR
 fi"
 
 # Deploy DDD Tool
 echo "   Deploying DDD..."
 DDD_REPO_URL="https://github.com/andrey-stepantsov/ddd"
-ssh $ALIAS_NAME "if [ -d /home/$USER/.mission/tools/ddd/.git ]; then
+ssh $ALIAS_NAME "if [ -d $MISSION_DIR/tools/ddd/.git ]; then
     echo '   Updating existing DDD repo...'
-    cd /home/$USER/.mission/tools/ddd && git fetch origin && git pull origin main
+    cd $MISSION_DIR/tools/ddd && git fetch origin && git pull origin main
 else
     echo '   Cloning DDD repo...'
     # If the directory exists but is not a git repo (e.g. empty folder from parent), remove it
-    if [ -d /home/$USER/.mission/tools/ddd ]; then
-        rm -rf /home/$USER/.mission/tools/ddd
+    if [ -d $MISSION_DIR/tools/ddd ]; then
+        rm -rf $MISSION_DIR/tools/ddd
     fi
     # Ensure parent dir exists
-    mkdir -p /home/$USER/.mission/tools
-    git clone $DDD_REPO_URL /home/$USER/.mission/tools/ddd
+    mkdir -p $MISSION_DIR/tools
+    git clone $DDD_REPO_URL $MISSION_DIR/tools/ddd
 fi"
 
 # Check for Required System Dependencies (No Root Install)
@@ -131,8 +138,8 @@ fi
 echo "   Installing Python Dependencies..."
 # We use pip install --user via the bootstrap wrapper to ensure we target the correct venv
 ssh $ALIAS_NAME "
-    if [ -f /home/$USER/.mission/tools/ddd/requirements.txt ]; then
-        /home/$USER/.mission/tools/lib/bootstrap.sh -m pip install -r /home/$USER/.mission/tools/ddd/requirements.txt
+    if [ -f $MISSION_DIR/tools/ddd/requirements.txt ]; then
+        $MISSION_DIR/tools/lib/bootstrap.sh -m pip install -r $MISSION_DIR/tools/ddd/requirements.txt
     else
         echo '⚠️  DDD requirements.txt not found.'
     fi
@@ -141,7 +148,7 @@ ssh $ALIAS_NAME "
 # Launch Tower if not running
 # launch_tower script handles tmux session creation idempotently
 echo "   Checking/Launching Tower..."
-ssh $ALIAS_NAME "PROJECT_ROOT=$REMOTE_ROOT /home/$USER/.mission/tools/bin/launch_tower"
+ssh $ALIAS_NAME "PROJECT_ROOT=$REMOTE_ROOT $MISSION_DIR/tools/bin/launch_tower"
 
 echo "✅ Configuration Complete!"
 echo "   You can now initialize a project:"
