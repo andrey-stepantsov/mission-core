@@ -145,7 +145,20 @@ def do_pull(args):
             print(f"  Failed to ghost {dep_path}: {e}")
 
 
-def do_push(args):
+
+def trigger_build(config):
+    """Triggers the remote build via DDD."""
+    host = config['host_target']
+    remote_root = config.get('remote_root', '.')
+    
+    # Use remote_root to find .ddd
+    build_req = f"{remote_root}/.ddd/run/build.request"
+    
+    print("Triggering remote build...")
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+    run_command(["ssh"] + ssh_opts + [host, f"touch {build_req}"])
+
+def do_push(args, trigger=True):
     """Pushes a file back to the host."""
     config = load_config()
     host = config['host_target']
@@ -178,14 +191,11 @@ def do_push(args):
     rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", local_path, f"{host}:{remote_path}"]
     run_command(rsync_cmd)
     
-    # 4. Trigger Remote Build
-    # Use remote_root to find .ddd
-    build_req = f"{remote_root}/.ddd/run/build.request"
-    
-    print("Triggering remote build...")
-    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-    run_command(["ssh"] + ssh_opts + [host, f"touch {build_req}"])
-    print("Sync complete.")
+    if trigger:
+        trigger_build(config)
+        print("Sync & Trigger complete.")
+    else:
+        print("Sync complete (No Trigger).")
 
 def do_listen(args):
     """Listens to the Mission Radio (remote build logs)."""
@@ -323,14 +333,18 @@ def do_live(args):
                             file = f_path
                         
                         try:
-                            do_push(PushArgs())
+                            # We don't trigger per file anymore
+                            do_push(PushArgs(), trigger=False)
                         except SystemExit:
                              # do_push calls sys.exit(1) on failure, we must catch it
                             print(f"⚠️ Push failed for {f_path}")
                         except Exception as e:
                             print(f"⚠️ Error pushing {f_path}: {e}")
                             
-                print("✨ Synced.")
+                # Trigger ONCE after batch
+                print("Triggering remote build for batch...")
+                trigger_build(load_config())
+                print("✨ Synced & Triggered.")
 
     except KeyboardInterrupt:
         print("\n🔌 Disconnecting Synapse.")
