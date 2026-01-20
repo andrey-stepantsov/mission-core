@@ -3,21 +3,26 @@ set -e
 
 # Defaults
 USER="oracle"
-HOST="mission-host" 
+HOST="mission-host" # Default internal docker name, but can be IP
+PORT="2222"
+ALIAS="mission-dev"
 REMOTE_ROOT="/repos/projects/project0"
 
 # Parse Args
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -u|--user) USER="$2"; shift ;;
+        -h|--host|--hostname) HOST="$2"; shift ;;
+        -p|--port) PORT="$2"; shift ;;
+        -a|--alias) ALIAS="$2"; shift ;;
         -d|--dir|--mount-dir|--remote-root) REMOTE_ROOT="$2"; shift ;;
-        -h|--host) HOST="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
 done
 
-echo "🚀 Configuring Simulated Remote Host: $HOST"
+echo "🚀 Configuring Remote Host: $ALIAS"
+echo "   Host: $HOST ($PORT)"
 echo "   User: $USER"
 echo "   Remote Root: $REMOTE_ROOT"
 
@@ -29,20 +34,30 @@ if [ ! -f ~/.ssh/id_rsa ]; then
 fi
 PUBKEY=$(cat ~/.ssh/id_rsa.pub)
 
-echo "   Injecting authorized_key into container ($HOST)..."
-docker exec "$HOST" bash -c "mkdir -p /home/$USER/.ssh && echo '$PUBKEY' >> /home/$USER/.ssh/authorized_keys && chown $USER:$USER /home/$USER/.ssh/authorized_keys && chmod 600 /home/$USER/.ssh/authorized_keys"
+# Try initial connection to copy ID
+# We assume the user can log in via password or already has access. 
+# This simplistic approach works for the sim (docker exec) but for real host usually requires ssh-copy-id
+if [ "$HOST" == "mission-host" ]; then
+    # Simulation shortcut
+    echo "   Injecting authorized_key into container ($HOST)..."
+    docker exec "$HOST" bash -c "mkdir -p /home/$USER/.ssh && echo '$PUBKEY' >> /home/$USER/.ssh/authorized_keys && chown $USER:$USER /home/$USER/.ssh/authorized_keys && chmod 600 /home/$USER/.ssh/authorized_keys"
+else
+    # Real Host Best Effort
+    echo "   Attempting ssh-copy-id (You may be prompted for password)..."
+    ssh-copy-id -p $PORT -i ~/.ssh/id_rsa.pub $USER@$HOST || echo "⚠️  ssh-copy-id failed. Ensure you can access $USER@$HOST manually."
+fi
 
 # 2. SSH Config Alias
 echo "🔌 Verifying SSH connectivity..."
-ALIAS_NAME="mission-sim"
+ALIAS_NAME="$ALIAS"
 if ! grep -q "Host $ALIAS_NAME" ~/.ssh/config; then
     echo "   Adding '$ALIAS_NAME' alias to ~/.ssh/config..."
     cat >> ~/.ssh/config <<EOF
 
 Host $ALIAS_NAME
-    HostName localhost
+    HostName $HOST
     User $USER
-    Port 2222
+    Port $PORT
     IdentityFile ~/.ssh/id_rsa
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
