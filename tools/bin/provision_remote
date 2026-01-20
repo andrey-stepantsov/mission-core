@@ -129,10 +129,10 @@ fi
 
 # Install Python Dependencies (User Space)
 echo "   Installing Python Dependencies..."
-# We use pip install --user
+# We use pip install --user via the bootstrap wrapper to ensure we target the correct venv
 ssh $ALIAS_NAME "
     if [ -f /home/$USER/.mission/tools/ddd/requirements.txt ]; then
-        python3 -m pip install --user -r /home/$USER/.mission/tools/ddd/requirements.txt
+        /home/$USER/.mission/tools/lib/bootstrap.sh -m pip install -r /home/$USER/.mission/tools/ddd/requirements.txt
     else
         echo '⚠️  DDD requirements.txt not found.'
     fi
