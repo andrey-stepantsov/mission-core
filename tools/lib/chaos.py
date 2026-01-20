@@ -6,15 +6,16 @@ import stat
 from pathlib import Path
 
 # --- Configuration Constants ---
-APP_COMPILER = "/usr/bin/x86_64-linux-gnu-g++-14"
+# --- Configuration Constants ---
+APP_COMPILER = "/usr/bin/g++"
 APP_FLAGS = [
     "-DGTEST_DONT_DEFINE_FAIL=1", "-DGTEST_HAS_PTHREAD=1",
     "-fPIC", "-fstack-check", "-fstack-protector-strong",
-    "-O0", "-march=corei7", "-std=c++23", "-Wall", "-Werror",
+    "-O0", "-std=c++23", "-Wall", "-Werror", # Removed -march=corei7 for portability
     "-D_GNU_SOURCE", "-DASIC_BCM"
 ]
 
-DRIVER_COMPILER = "/opt/rh/devtoolset-11/root/usr/bin/gcc"
+DRIVER_COMPILER = "/usr/bin/gcc"
 DRIVER_FLAGS = [
     "-DDEMO_EN", "-DCACHE_ENABLED", "-std=gnu99",
     "-g", "-Werror", "-Wall", "-Wextra", "-Wformat=2",
