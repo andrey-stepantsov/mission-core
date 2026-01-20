@@ -1,0 +1,39 @@
+#!/bin/bash
+# launch_tower: Ensures the Mission Tower (tmux) is running with the Watcher
+#
+# Usage: ./launch_tower
+#
+# 1. Checks for 'mission_tower' session.
+# 2. If missing, creates it and launches 'dd-daemon'.
+# 3. If running via SSH payload, it just starts it.
+
+SESSION="mission_tower"
+BIN_DIR="$(dirname "$0")"
+# Try dedicated DDD repo location first, fall back to same dir
+if [ -f "$BIN_DIR/../ddd/bin/dd-daemon" ]; then
+    DAEMON="$BIN_DIR/../ddd/bin/dd-daemon"
+else
+    DAEMON="$BIN_DIR/dd-daemon"
+fi
+
+# Check if session exists
+tmux has-session -t "$SESSION" 2>/dev/null
+
+if [ $? != 0 ]; then
+    echo "Tower: Creating new session '$SESSION'..."
+    # Create detached session
+    tmux new-session -d -s "$SESSION"
+    
+    # Launch Watcher in the first window
+    # We use 'exec' so the pane doesn't close immediately if daemon exits (though daemon loops)
+    # Actually, we want it to stay open.
+    tmux send-keys -t "$SESSION:0" "$DAEMON" C-m
+    
+    echo "Tower: Launched."
+else
+    echo "Tower: Session '$SESSION' already exists."
+fi
+
+# If we are in an interactive SSH session (check TTY), maybe offer to attach?
+# For now, just exit success.
+exit 0
