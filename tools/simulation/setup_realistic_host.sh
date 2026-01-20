@@ -26,8 +26,19 @@ ssh $HOST "sudo mkdir -p $PROJECT_ROOT $SDK_DIR $FRAMEWORK_DIR $REMOTE_MISSION"
 ssh $HOST "sudo chown -R $USER:$USER /repos /auto /opt"
 
 # 2. Deploy Mission Tools
-echo "   Deploying Toolchain..."
-rsync -az --exclude '.git' .mission/ "$HOST:$REMOTE_MISSION/"
+echo "   Deploying Toolchain via Git..."
+# Install git if missing
+ssh $HOST "which git >/dev/null || (sudo apt-get update && sudo apt-get install -y git)"
+
+# Clone Mission Core
+echo "   Cloning Mission Core..."
+ssh $HOST "rm -rf $REMOTE_MISSION"
+ssh $HOST "git clone https://github.com/andrey-stepantsov/mission-core $REMOTE_MISSION"
+
+# Clone DDD
+echo "   Cloning DDD..."
+ssh $HOST "rm -rf $REMOTE_MISSION/tools/ddd"
+ssh $HOST "git clone https://github.com/andrey-stepantsov/ddd $REMOTE_MISSION/tools/ddd"
 
 # 3. Create Chaos Plan
 echo "   Planting 'Project0' Chaos Plan..."
