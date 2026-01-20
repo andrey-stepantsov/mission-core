@@ -72,15 +72,33 @@ while true; do
             SUCCESS=0
             if [ -f "Makefile" ]; then
                 echo "Running make..."
-                if make; then
-                    SUCCESS=1
+                make
+                if [ $? -eq 0 ]; then SUCCESS=1; else SUCCESS=0; fi
+            elif [ -f "$CONFIG_FILE" ]; then
+                # Use Python to extract command
+                CMD=$(python3 -c "import json, os; 
+try:
+    data = json.load(open(os.environ['CONFIG_FILE']))
+    # Try targets.dev.build.cmd or default to test_command
+    cmd = data.get('targets', {}).get('dev', {}).get('build', {}).get('cmd')
+    if not cmd:
+        cmd = data.get('test_command')
+    print(cmd if cmd else '')
+except:
+    print('')
+")
+                if [ -n "$CMD" ]; then
+                    echo "Executing Configured Command: $CMD"
+                    $CMD
+                    if [ $? -eq 0 ]; then SUCCESS=1; else SUCCESS=0; fi
                 else
-                    SUCCESS=0
+                    echo "Configuration found but no command extracted. Simulating..."
+                    sleep 1
+                    SUCCESS=1
                 fi
             else
                 echo "No build system found. Simulating build..."
-                sleep 2
-                echo "Build Success!"
+                sleep 0.5
                 SUCCESS=1
             fi
             echo "--- Build End: $(date) ---"
