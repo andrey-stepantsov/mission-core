@@ -189,7 +189,8 @@ def trigger_build(config):
     except Exception:
          pass
 
-    run_command(["ssh"] + ssh_opts + [host, f"touch {build_req}"])
+    # Reliable Trigger: Remove then Touch (trigger on_created)
+    run_command(["ssh"] + ssh_opts + [host, f"rm -f {build_req} && touch {build_req}"])
 
 def do_build(args):
     """Explicitly triggers the remote build."""

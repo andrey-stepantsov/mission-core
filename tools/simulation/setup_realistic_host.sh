@@ -72,13 +72,13 @@ components:
     external_includes: ["$FRAMEWORK_DIR/include"]
     style: app_modern_cpp
     compile_db: root
-
+    
 ddd_config:
   project_root: "$PROJECT_ROOT"
   targets:
     dev:
       build:
-        cmd: "./mk"
+        cmd: "make"
       verify:
         cmd: "./mk-test"
   test_command: "./mk-test"
@@ -138,6 +138,13 @@ g++ $PROJECT_ROOT/src/main.o \$LIB0_OBJ -o $PROJECT_ROOT/main
 echo "✅ Project0 Build Success"
 EOF
 ssh $HOST "chmod +x $PROJECT_ROOT/mk"
+
+# Makefile (Bridge for vanilla DD-Daemon)
+ssh $HOST "cat > $PROJECT_ROOT/Makefile" <<EOF
+all:
+	@./mk
+EOF
+
 
 # mk-test (Root Verify)
 ssh $HOST "cat > $PROJECT_ROOT/mk-test" <<EOF
