@@ -1,0 +1,84 @@
+#!/bin/bash
+# antigravity-config: Bootstraps Antigravity agent configuration for Remote Brain
+
+WORKFLOW_DIR=".agent/workflows"
+WORKFLOW_FILE="$WORKFLOW_DIR/remote_brain.md"
+
+# 1. Resolve Absolute Paths
+# usage: /Users/stepants/dev/chaos/.mission/tools/bin/antigravity-config
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECTOR_PATH="$SCRIPT_DIR/projector"
+
+echo "🧠 Configuring Antigravity for Remote Brain..."
+echo "   Tool Path: $PROJECTOR_PATH"
+
+# 2. Ensure Workflow Directory Exists
+if [ ! -d "$WORKFLOW_DIR" ]; then
+    echo "   Creating $WORKFLOW_DIR..."
+    mkdir -p "$WORKFLOW_DIR"
+fi
+
+# 3. Create Remote Brain Workflow
+# We forcefully overwrite to ensure latest instructions are used
+echo "   Creating/Updating $WORKFLOW_FILE..."
+cat > "$WORKFLOW_FILE" <<EOF
+---
+description: Critical workflow for working in the Remote Brain (Hologram) environment
+---
+
+# Remote Brain Workflow
+
+You are working in a **Hologram** environment. This is a sparse, local projection of a massive remote repository.
+
+## Detection
+If you see a \`.hologram_config\` file in the root, you are in a Hologram.
+
+## 🚨 CRITICAL RULES 🚨
+
+1.  **DO NOT INVESTIGATE TOOLING**
+    *   The \`projector\` tool is an **external binary/script**. Do NOT read its source code. Do NOT try to debug it.
+    *   Just USE it as described below.
+
+2.  **DO NOT EXECUTE LOCALLY**
+    *   Do NOT try to compile or run C/C++/Python code locally.
+    *   The environment is remote. Use \`projector build\` or \`projector live\`.
+
+3.  **DO NOT EDIT \`outside_wall/\`**
+    *   Files in \`outside_wall/\` are read-only dependencies. NEVER edit them.
+
+## 🛠️ Tooling: \`projector\`
+
+**ABSOLUTE PATH**: \`$PROJECTOR_PATH\`
+
+### A. Creating New Files
+If you are asked to create a new file (e.g., \`helloworld.c\`):
+1.  Create it locally inside the \`hologram/\` directory.
+    *   \`echo '...' > hologram/helloworld.c\`
+2.  Push it to the remote:
+    *   \`$PROJECTOR_PATH push hologram/helloworld.c\`
+
+### B. Editing Existing Files
+1.  **Find/Fetch**: If the file is not in \`hologram/\`, pull it:
+    *   \`$PROJECTOR_PATH pull path/to/remote/file.c\`
+2.  **Edit**: Modify the file in \`hologram/\`.
+3.  **Sync**:
+    *   **Manual**: \`$PROJECTOR_PATH push hologram/file.c\` (Syncs only)
+    *   **Manual + Build**: \`$PROJECTOR_PATH push hologram/file.c --trigger\`
+    *   **Live (Recommended)**: Run \`$PROJECTOR_PATH live\` in a terminal. It will auto-sync on save.
+
+### C. Building & Running
+You must trigger the build on the REMOTE host.
+*   **Command**: \`$PROJECTOR_PATH build\`
+*   **Feedback**: Watch the output of \`projector live\` (Radio) or \`projector build\` for compilation errors.
+
+### D. Complex Builds (User Interaction)
+Legacy build systems are often complex (e.g., specific subdirectories, environment variables).
+*   **If the default build fails**: DO NOT GUESS.
+*   **ASK THE USER**: "What is the specific command to build this module? Do I need to \`cd\` into a subdirectory?"
+*   **Configure**: Update \`hologram/.ddd/config.json\` with the user's command:
+    \`\`\`json
+    { "targets": { "dev": { "build": { "cmd": "cd subdir && make" } } } }
+    \`\`\`
+EOF
+
+echo "✅ Antigravity configuration complete."

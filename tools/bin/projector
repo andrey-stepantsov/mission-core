@@ -19,9 +19,19 @@ def run_command(cmd, shell=False, capture_stderr=True):
         result = subprocess.run(cmd, shell=shell, check=True, stdout=subprocess.PIPE, stderr=stderr_dest, text=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        print(f"Error running command: {cmd}")
-        print(f"Stderr: {e.stderr}")
-        sys.exit(1)
+        # Check if stderr is just noise (warnings)
+        err_msg = e.stderr if e.stderr else ""
+        lines = err_msg.splitlines()
+        real_errors = [l for l in lines if not (l.startswith("Warning:") or "setlocale" in l)]
+        
+        if real_errors:
+            print(f"Error running command: {cmd}")
+            print(f"Stderr: {err_msg}")
+        elif not capture_stderr:
+             # If we weren't capturing, typically means interactive or we don't care about output unless failed
+            print(f"Command failed with exit code {e.returncode}: {cmd}")
+            
+        raise e  # Re-raise so caller handles flow
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
@@ -95,7 +105,11 @@ def do_pull(args):
     
     # 1. Verify file exists on host
     ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-    run_command(["ssh"] + ssh_opts + [host, f"test -f {remote_path}"])
+    try:
+        run_command(["ssh"] + ssh_opts + [host, f"test -f {remote_path}"])
+    except subprocess.CalledProcessError:
+        print(f"Error: File '{remote_path}' not found on remote host.")
+        sys.exit(1)
     
     # 2. Rsync file to hologram/
     local_dest = os.path.join(HOLOGRAM_DIR, rel_path)
@@ -166,6 +180,15 @@ def trigger_build(config):
     
     print("Triggering remote build...")
     ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+    
+    # Ensure run directory exists
+    req_dir = os.path.dirname(build_req)
+    # Ignore errors (best effort)
+    try:
+         run_command(["ssh"] + ssh_opts + [host, f"mkdir -p {req_dir}"])
+    except Exception:
+         pass
+
     run_command(["ssh"] + ssh_opts + [host, f"touch {build_req}"])
 
 def do_build(args):
@@ -174,12 +197,16 @@ def do_build(args):
     trigger_build(config)
     print("✅ Build triggered.")
 
-def do_push(args, trigger=True):
+def do_push(args, trigger=False):
     """Pushes a file back to the host."""
     config = load_config()
     host = config['host_target']
     remote_root = config.get('remote_root', '.')
     local_path = args.file
+
+    # Check for CLI override
+    if hasattr(args, 'trigger') and args.trigger:
+        trigger = True
     
     abs_path = os.path.abspath(local_path)
     hologram_abs = os.path.abspath(HOLOGRAM_DIR)
@@ -204,6 +231,17 @@ def do_push(args, trigger=True):
     remote_path = f"{remote_root}/{rel_path}".replace(os.path.sep, "/")
     
     print(f"Pushing {local_path} to {host}:{remote_path}...")
+    
+    # Ensure remote directory exists
+    remote_dir = os.path.dirname(remote_path)
+    if remote_dir and remote_dir != ".":
+         ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+         # We ignore errors here in case it's a permission thing or exists, rsync will complain if it realy fails
+         try:
+             run_command(["ssh"] + ssh_opts + [host, f"mkdir -p {remote_dir}"])
+         except Exception:
+             pass
+
     rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", local_path, f"{host}:{remote_path}"]
     run_command(rsync_cmd)
     
@@ -406,6 +444,7 @@ def main():
     # Push
     p_push = subparsers.add_parser("push", help="Push file to host")
     p_push.add_argument("file", help="Local file path")
+    p_push.add_argument("--trigger", action="store_true", help="Trigger remote build after push")
     p_push.set_defaults(func=do_push)
     
     # Listen

@@ -16,13 +16,22 @@ else
     DAEMON="$BIN_DIR/dd-daemon"
 fi
 
+# Calculate Project Root (Assuming this script is in .mission/tools/bin)
+# ../../../  -> Project Root
+PROJECT_ROOT="$(cd "$BIN_DIR/../../.." && pwd)"
+export DDD_ROOT="$PROJECT_ROOT/.ddd"
+export PROJECT_ROOT="$PROJECT_ROOT"
+echo "Tower: Configured DDD_ROOT=$DDD_ROOT"
+echo "Tower: Configured PROJECT_ROOT=$PROJECT_ROOT"
+
 # Check if session exists
 tmux has-session -t "$SESSION" 2>/dev/null
 
 if [ $? != 0 ]; then
     echo "Tower: Creating new session '$SESSION'..."
-    # Create detached session
-    tmux new-session -d -s "$SESSION"
+    # Create detached session with environment variable
+    # We restart the tmux server environment to be safe or pass via new-session env
+    tmux new-session -d -s "$SESSION" "DDD_ROOT='$DDD_ROOT' PROJECT_ROOT='$PROJECT_ROOT' $DAEMON"
     
     # Launch Watcher in the first window
     # We use 'exec' so the pane doesn't close immediately if daemon exits (though daemon loops)

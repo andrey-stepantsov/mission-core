@@ -9,7 +9,10 @@
 # 3. On trigger: Locks, Builds, Logs, Unlocks.
 
 
-DDD_ROOT="${HOME}/.ddd"
+# Allow DDD_ROOT override (for project-specific daemons)
+if [ -z "$DDD_ROOT" ]; then
+    DDD_ROOT="${HOME}/.ddd"
+fi
 RUN_DIR="$DDD_ROOT/run"
 REQUEST_FILE="$RUN_DIR/build.request"
 LOCK_FILE="$RUN_DIR/ipc.lock"
@@ -56,6 +59,13 @@ while true; do
             if [ -f "$CONFIG_FILE" ]; then
                 # TODO: Parse config.json for actual command. for now, just cat it.
                 echo "Configuration found but ignored in Lite version."
+            fi
+            
+            # Parse config if needed (skipped in Lite)
+            
+            # Switch to Project Root if defined
+            if [ -n "$PROJECT_ROOT" ]; then
+                cd "$PROJECT_ROOT"
             fi
             
             # Default action: run make if exists, else generic echo
