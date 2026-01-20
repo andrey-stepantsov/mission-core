@@ -4,7 +4,7 @@ import time
 
 # Configuration
 # We wrap this in abspath to satisfy the strict infrastructure tests
-DEFAULT_LOG = os.path.abspath(os.environ.get("MISSION_JOURNAL", ".mission-context/mission_log.md"))
+DEFAULT_LOG = os.path.abspath(os.environ.get("MISSION_JOURNAL") or ".mission-context/mission_log.md")
 
 def get_timestamp():
     return datetime.datetime.now().isoformat(timespec='seconds')

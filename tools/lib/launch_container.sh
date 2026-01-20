@@ -30,7 +30,8 @@ if [ -x "$TOOLS_ROOT/bin/sync_ignore" ]; then "$TOOLS_ROOT/bin/sync_ignore" 2>/d
 
 TTY_FLAG=""
 if [ -t 0 ]; then TTY_FLAG="-t"; fi
-touch .mission/.global_gitignore
+# Ensure global gitignore exists
+touch "$MISSION_ROOT/.global_gitignore"
 
 printf "🐳 Launching Container (Unified Arch)...\n"
 
@@ -68,6 +69,7 @@ DOCKER_ARGS=(
     -e VERTEXAI_PROJECT="${VERTEXAI_PROJECT}"
     -e VERTEXAI_LOCATION="${VERTEXAI_LOCATION}"
     -e DIRECTOR_MODEL="${DIRECTOR_MODEL}"
+    -e MISSION_JOURNAL="${MISSION_JOURNAL}"
     -w "/repo"
 )
 

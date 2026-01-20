@@ -6,8 +6,9 @@ import json
 from datetime import datetime
 
 # --- Configuration ---
-LOG_FILE = os.environ.get("MISSION_JOURNAL", ".mission-context/mission_log.md")
+LOG_FILE = os.environ.get("MISSION_JOURNAL") or ".mission-context/mission_log.md"
 REPO_ROOT = "/repo"
+CURRENT_CONTEXT = REPO_ROOT
 
 def log(msg):
     """Prints to Docker logs with flushing."""
@@ -135,21 +136,35 @@ def process_command(cmd_text):
 
     # 3. VERIFICATION
     elif "verification" in cmd_clean:
-        # Read the config we just saved
+        # Read the config we just saved (Context-Aware)
         try:
-            with open(os.path.join(REPO_ROOT, ".ddd/config.json"), "r") as f:
-                cfg = json.load(f)
-                cmd = cfg.get("verification_command", "echo 'System Online'")
-                output = execute_shell(cmd)
-                
-                # 1. Save Raw Log
-                log_path = os.path.join(REPO_ROOT, ".ddd", "last_run.log")
-                with open(log_path, "w") as lf:
-                    lf.write(output)
+            cfg_path = os.path.join(CURRENT_CONTEXT, ".ddd/config.json")
+            # Fallback to Root if context config missing? No, strict is better for now.
+            
+            # If config doesn't exist in subtext, maybe fallback to root?
+            if not os.path.exists(cfg_path) and CURRENT_CONTEXT != REPO_ROOT:
+                 cfg_path = os.path.join(REPO_ROOT, ".ddd/config.json")
 
-                # 2. Apply Filters
-                filtered_output = apply_filters(output)
-                return f"Verification Output: {filtered_output}"
+            cmd = "echo 'System Online'"
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r") as f:
+                    cfg = json.load(f)
+                    cmd = cfg.get("verification_command", cmd)
+            
+            # Execute in Context!
+            output = execute_shell(cmd, cwd=CURRENT_CONTEXT)
+                
+            # 1. Save Raw Log (in Context)
+            log_dir = os.path.join(CURRENT_CONTEXT, ".ddd")
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, "last_run.log")
+            
+            with open(log_path, "w") as lf:
+                lf.write(output)
+
+            # 2. Apply Filters
+            filtered_output = apply_filters(output)
+            return f"Verification Output: {filtered_output}"
         except Exception as e:
             return f"Verification Error: {e}"
 
@@ -184,6 +199,9 @@ def main():
     # Open file and go to end
     f = open(LOG_FILE, "r")
     f.seek(0, 2)
+    
+    # Signal Readiness to the Radio (for synchronization)
+    write_ack("Daemon Online")
 
     while True:
         line = f.readline()
@@ -191,6 +209,16 @@ def main():
             time.sleep(0.1)
             continue
             
+        # Look for [CTX] Signal
+        if "[CTX] Switch to " in line:
+            try:
+                new_ctx = line.split("[CTX] Switch to ", 1)[1].strip()
+                global CURRENT_CONTEXT
+                CURRENT_CONTEXT = new_ctx
+                log(f"Context Switched to: {CURRENT_CONTEXT}")
+            except Exception:
+                pass
+
         # Look for [REQ] from Director
         if "[REQ]" in line and "[Director -> LocalSmith]" in line:
             # log(f"Detected REQ: {line.strip()}")

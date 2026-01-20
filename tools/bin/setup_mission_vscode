@@ -1,0 +1,167 @@
+#!/bin/bash
+set -e
+
+# setup_mission_vscode: Full provisioning for Remote Brain + VS Code
+# Usage: ./setup_mission_vscode --host <HOST> --remote-root <PATH> [--build-cmd <CMD>]
+
+# Defaults
+HOST=""
+USER=""
+ALIAS="mission-dev"
+REMOTE_ROOT=""
+BUILD_CMD="make"
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -h|--host) HOST="$2"; shift ;;
+        -u|--user) USER="$2"; shift ;;
+        -a|--alias) ALIAS="$2"; shift ;;
+        -r|--remote-root) REMOTE_ROOT="$2"; shift ;;
+        -b|--build-cmd) BUILD_CMD="$2"; shift ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+if [ -z "$HOST" ] || [ -z "$REMOTE_ROOT" ]; then
+    echo "Usage: $0 --host <HOST> --remote-root <PATH> [--user <USER>] [--alias <ALIAS>] [--build-cmd <CMD>]"
+    exit 1
+fi
+
+if [ -z "$USER" ]; then
+    USER=$(whoami)
+fi
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")" # Assuming tools/bin/setup...
+
+echo "🚀 Setting up Mission Context..."
+echo "   Host: $HOST"
+echo "   Root: $REMOTE_ROOT"
+echo "   Build: $BUILD_CMD"
+
+# 1. Provision Remote Host (Idempotent)
+echo "----------------------------------------"
+echo "1. Provisioning Remote Host..."
+"$SCRIPT_DIR/provision_remote" --host "$HOST" --user "$USER" --alias "$ALIAS" --remote-root "$REMOTE_ROOT"
+
+# 2. Configure Remote Build System
+echo "----------------------------------------"
+echo "2. Configuring Remote Build System (.ddd/config.json)..."
+
+# Construct JSON config
+# We escape quotes carefully
+CONFIG_JSON=$(cat <<EOF
+{
+  "targets": {
+    "default": {
+      "build": {
+        "cmd": "$BUILD_CMD",
+        "path_strip": "$REMOTE_ROOT/"
+      }
+    }
+  }
+}
+EOF
+)
+
+# Write to remote
+ssh "$ALIAS" "mkdir -p $REMOTE_ROOT/.ddd && echo '$CONFIG_JSON' > $REMOTE_ROOT/.ddd/config.json"
+echo "✅ Remote build config written to $REMOTE_ROOT/.ddd/config.json"
+
+# 3. Initialize Local Projector
+echo "----------------------------------------"
+echo "3. Initializing Local Projector..."
+"$SCRIPT_DIR/projector" init "$ALIAS" --remote-root "$REMOTE_ROOT"
+
+# 4. Configure Local VS Code
+echo "----------------------------------------"
+echo "4. Configuring Local VS Code..."
+mkdir -p .vscode
+
+# c_cpp_properties.json
+cat > .vscode/c_cpp_properties.json <<EOF
+{
+    "configurations": [
+        {
+            "name": "Mission Hologram",
+            "includePath": [
+                "\${workspaceFolder}/**",
+                "\${workspaceFolder}/outside_wall/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "\${workspaceFolder}/hologram/compile_commands.json"
+        }
+    ],
+    "version": 4
+}
+EOF
+
+# tasks.json
+cat > .vscode/tasks.json <<EOF
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Projector: Build (Remote)",
+            "type": "shell",
+            "command": "\${workspaceFolder}/.mission/tools/bin/projector",
+            "args": [
+                "build",
+                "--context-from",
+                "\${file}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "\$gcc"
+        },
+        {
+            "label": "Projector: Push Current File",
+            "type": "shell",
+            "command": "\${workspaceFolder}/.mission/tools/bin/projector",
+            "args": [
+                "push",
+                "\${file}"
+            ],
+            "group": "none",
+            "presentation": {
+                "reveal": "silent",
+                "panel": "shared"
+            }
+        },
+        {
+            "label": "Projector: Push & Trigger",
+            "type": "shell",
+            "command": "\${workspaceFolder}/.mission/tools/bin/projector",
+            "args": [
+                "push",
+                "\${file}",
+                "--trigger"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "\$gcc"
+        }
+    ]
+}
+EOF
+
+echo "✅ VS Code configuration updated."
+echo ""
+echo "🎉 Mission Setup Complete!"
+echo "   - Remote configured at $HOST:$REMOTE_ROOT"
+echo "   - Build command set to: '$BUILD_CMD'"
+echo "   - VS Code ready."

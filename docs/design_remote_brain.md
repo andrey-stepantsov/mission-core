@@ -79,7 +79,7 @@ We strictly enforce a boundary between "Inside" (Editable) and "Outside" (Read-O
 
 ## 6. Migration Plan
 1.  **Stop Coder**: `docker stop aider-vertex` on Host.
-2.  **Launch Tower**: `ssh user@host "tmux new -d -s mission_tower './.mission/tools/bin/launch_tower'"`
+2.  **Launch Tower**: `ssh user@host "cd /path/to/repo && ./.mission/tools/bin/launch_tower"`
 3.  **Start Client**: Run Antigravity on Laptop.
-    *   `projector init user@host:/path/to/repo`
+    *   `projector init user@host --remote-root /path/to/repo`
     *   `antigravity start`
