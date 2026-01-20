@@ -170,7 +170,9 @@ def do_push(args):
         
     # 3. Calculate remote path
     rel_path = os.path.relpath(abs_path, hologram_abs)
-    remote_path = "/" + rel_path # Assuming absolute paths on remote for simplicity
+    # remote_root comes from config (loaded at start of do_push)
+    # Ensure standard slash for remote path regardless of local OS
+    remote_path = f"{remote_root}/{rel_path}".replace(os.path.sep, "/")
     
     print(f"Pushing {local_path} to {host}:{remote_path}...")
     rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", local_path, f"{host}:{remote_path}"]
