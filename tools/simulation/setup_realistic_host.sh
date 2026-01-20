@@ -27,8 +27,8 @@ ssh $HOST "sudo chown -R $USER:$USER /repos /auto /opt"
 
 # 2. Deploy Mission Tools
 echo "   Deploying Toolchain via Git..."
-# Install git if missing
-ssh $HOST "which git >/dev/null || (sudo apt-get update && sudo apt-get install -y git)"
+# Install git and python deps if missing
+ssh $HOST "which git >/dev/null || (sudo apt-get update && sudo apt-get install -y git python3-venv curl)"
 
 # Clone Mission Core
 echo "   Cloning Mission Core..."
@@ -39,6 +39,10 @@ ssh $HOST "git clone https://github.com/andrey-stepantsov/mission-core $REMOTE_M
 echo "   Cloning DDD..."
 ssh $HOST "rm -rf $REMOTE_MISSION/tools/ddd"
 ssh $HOST "git clone https://github.com/andrey-stepantsov/ddd $REMOTE_MISSION/tools/ddd"
+
+# Install DDD Dependencies
+echo "   Installing DDD Dependencies..."
+ssh $HOST "python3 -m pip install -r $REMOTE_MISSION/tools/ddd/requirements.txt"
 
 # 3. Create Chaos Plan
 echo "   Planting 'Project0' Chaos Plan..."

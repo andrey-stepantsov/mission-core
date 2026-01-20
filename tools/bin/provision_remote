@@ -69,8 +69,9 @@ rsync -az -e "ssh" \
     "$ALIAS_NAME:/home/$USER/.mission/"
 
 # Launch Tower if not running
+# launch_tower script handles tmux session creation idempotently
 echo "   Checking/Launching Tower..."
-ssh $ALIAS_NAME "tmux has-session -t mission_tower 2>/dev/null || tmux new-session -d -s mission_tower '/home/$USER/.mission/tools/bin/launch_tower'"
+ssh $ALIAS_NAME "PROJECT_ROOT=$REMOTE_ROOT /home/$USER/.mission/tools/bin/launch_tower"
 
 echo "✅ Configuration Complete!"
 echo "   You can now initialize a project:"
