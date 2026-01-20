@@ -201,12 +201,21 @@ def main():
         includes = extract_includes(entry, repo_root)
         macros = extract_macros(cmd_str)
         
+        # Prepare full info
+        args = []
+        if "arguments" in entry:
+            args = entry["arguments"]
+        elif "command" in entry:
+            import shlex
+            args = shlex.split(entry["command"])
+
         print(json.dumps({
             "file": target_file,
             "found": True,
             "includes": includes,
             "macros": macros,
-            "selected_command": cmd_str[:100] + "...",
+            "arguments": args, # Full arguments for re-execution
+            "directory": entry.get("directory", repo_root),
             "stats": stats 
         }, indent=2))
     else:

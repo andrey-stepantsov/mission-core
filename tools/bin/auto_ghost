@@ -125,19 +125,63 @@ def main():
                 context_data = json.loads(result.stdout)
                 include_paths = context_data.get("includes", [])
                 
-                # Step 2: recursive scan
-                scanner = DependencyScanner(include_paths, repo_root)
-                scanner.scan_file(target_file)
+                # Step 2: Compiler-based scan (gcc -M)
+                # Parse arguments from c_context
+                compile_args = context_data.get("arguments", [])
+                cwd = context_data.get("directory", repo_root)
                 
-                # Step 3: Collect
-                all_files.update(scanner.dependencies)
-                
-            except Exception as e:
-                 print(f"Error scanning {target_file}: {e}", file=sys.stderr)
-        else:
-            # Maybe just return the file itself if not C? or nothing?
-            # Existing behavior was error. Let's be lenient.
-            pass
+                if compile_args:
+                    try:
+                        # Construct -M command
+                        # Filter out -o, -c, -Werror
+                        scan_cmd = []
+                        skip_next = False
+                        for arg in compile_args:
+                            if skip_next:
+                                skip_next = False
+                                continue
+                            if arg == "-o":
+                                skip_next = True
+                                continue
+                            if arg in ["-c", "-Werror"]:
+                                continue
+                            scan_cmd.append(arg)
+                            
+                        # Add -M
+                        scan_cmd.append("-M")
+                        
+                        # Run it
+                        res = subprocess.run(scan_cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+                        
+                        # Parse Make Rule Output
+                        # e.g. "obj.o: source.c header.h ..."
+                        output = res.stdout
+                        # Join lines marked with \
+                        output = output.replace("\\\n", " ")
+                        
+                        # Split by space
+                        parts = output.split()
+                        
+                        # First part is target, skip it
+                        dependencies = parts[1:]
+                        
+                        for dep in dependencies:
+                            dep_path = Path(cwd) / dep
+                            if dep_path.exists():
+                                all_files.add(str(dep_path.resolve()))
+                                
+                    except Exception as e:
+                        # Fallback to regex if compiler matching fails (e.g. invalid flags)
+                        print(f"Warning: Compiler scan failed ({e}). Falling back to regex.", file=sys.stderr)
+                         # Fallback logic could go here, or just basic regex
+                        scanner = DependencyScanner(include_paths, repo_root)
+                        scanner.scan_file(target_file)
+                        all_files.update(scanner.dependencies)
+                else:
+                    # Fallback if no arguments (e.g. file not in DB)
+                    scanner = DependencyScanner(include_paths, repo_root)
+                    scanner.scan_file(target_file)
+                    all_files.update(scanner.dependencies)
 
     # Strategy 2: Weave View
     elif args.view:
