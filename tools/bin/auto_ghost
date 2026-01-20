@@ -183,6 +183,13 @@ def main():
                     scanner.scan_file(target_file)
                     all_files.update(scanner.dependencies)
 
+            except Exception as e:
+                 print(f"Error scanning {target_file}: {e}", file=sys.stderr)
+        else:
+            # Maybe just return the file itself if not C? or nothing?
+            # Existing behavior was error. Let's be lenient.
+            pass
+
     # Strategy 2: Weave View
     elif args.view:
         # If no target file, use the view
