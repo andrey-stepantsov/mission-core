@@ -4,7 +4,7 @@ set -e
 # Defaults
 USER="oracle"
 HOST="mission-host" # Default internal docker name, but can be IP
-PORT="2222"
+PORT="22"
 ALIAS="mission-dev"
 REMOTE_ROOT="/repos/projects/project0"
 
@@ -66,23 +66,15 @@ else
     echo "   SSH config alias '$ALIAS_NAME' already exists."
 fi
 
-# 3. Sync Tools & Launch Tower (The Persistent Brain)
+# 3. Provisioning (User Space Only)
 echo "🧠 Provisioning & Launching Tower..."
-# Note: We assume the host is already setup via setup_realistic_host.sh regarding directory structure.
-# But we need to make sure the user has access to the tools.
-# sync tools again just in case? setup_realistic_host.sh does it. 
-# But let's assume this script might be run independently.
 
-SCRIPT_DIR="$(dirname "$0")"
-MISSION_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)" 
-
-# Deploy tools via Git
+# Deploy Mission Tools via Git
 echo "   Deploying Mission Tools via Git..."
 BRANCH=$(git branch --show-current)
 REPO_URL="https://github.com/andrey-stepantsov/mission-core"
 
-# Check if repo exists, if so pull, else clone
-ssh $ALIAS_NAME "if [ -d /home/$USER/.mission ]; then
+ssh $ALIAS_NAME "if [ -d /home/$USER/.mission/.git ]; then
     echo '   Updating existing .mission repo...'
     cd /home/$USER/.mission && git fetch origin && git checkout $BRANCH && git pull origin $BRANCH
 else
@@ -107,15 +99,44 @@ else
     git clone $DDD_REPO_URL /home/$USER/.mission/tools/ddd
 fi"
 
-# Install Remote Brain Dependencies
-echo "   Installing Remote Brain Dependencies (Root Access Required)..."
-# We assume the user has sudo rights or we use a separate root provisioning step.
-# For the simulation 'oracle' user, we usually have sudo.
-ssh $ALIAS_NAME "sudo apt-get update && sudo apt-get install -y bear clang build-essential python3-pip python3-venv"
+# Check for Required System Dependencies (No Root Install)
+echo "   Verifying Remote Environment..."
+ssh $ALIAS_NAME "
+FAILED=0
+# Check Bear
+if ! command -v bear &> /dev/null; then
+    echo '⚠️  WARNING: \"bear\" not found in PATH. Real compilation DB generation will fail.'
+    echo '   Please install bear (or equivalent) manually or confirm it is in your PATH.'
+    FAILED=1
+fi
+# Check Clang
+if ! command -v clang &> /dev/null; then
+    echo '⚠️  WARNING: \"clang\" not found in PATH.'
+    echo '   Clang is recommended for implicit dependency scanning.'
+    FAILED=1
+fi
+# Check Python3
+if ! command -v python3 &> /dev/null; then
+    echo '❌ ERROR: \"python3\" is required.'
+    exit 1
+fi
+if [ \$FAILED -eq 1 ]; then
+    echo '⚠️  Proceeding with limited functionality...'
+else
+    echo '✅ Environment looks good.'
+fi
+"
 
-# Install Python Deps for DDD
+# Install Python Dependencies (User Space)
 echo "   Installing Python Dependencies..."
-ssh $ALIAS_NAME "pip3 install -r /home/$USER/.mission/tools/ddd/requirements.txt"
+# We use pip install --user
+ssh $ALIAS_NAME "
+    if [ -f /home/$USER/.mission/tools/ddd/requirements.txt ]; then
+        python3 -m pip install --user -r /home/$USER/.mission/tools/ddd/requirements.txt
+    else
+        echo '⚠️  DDD requirements.txt not found.'
+    fi
+"
 
 # Launch Tower if not running
 # launch_tower script handles tmux session creation idempotently
