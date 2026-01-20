@@ -158,6 +158,12 @@ def trigger_build(config):
     ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
     run_command(["ssh"] + ssh_opts + [host, f"touch {build_req}"])
 
+def do_build(args):
+    """Explicitly triggers the remote build."""
+    config = load_config()
+    trigger_build(config)
+    print("✅ Build triggered.")
+
 def do_push(args, trigger=True):
     """Pushes a file back to the host."""
     config = load_config()
@@ -341,10 +347,13 @@ def do_live(args):
                         except Exception as e:
                             print(f"⚠️ Error pushing {f_path}: {e}")
                             
-                # Trigger ONCE after batch
-                print("Triggering remote build for batch...")
-                trigger_build(load_config())
-                print("✨ Synced & Triggered.")
+                # Trigger ONCE after batch (if auto-build is enabled)
+                if not args.no_auto_build:
+                    print("Triggering remote build for batch...")
+                    trigger_build(load_config())
+                    print("✨ Synced & Triggered.")
+                else:
+                    print("✨ Synced (Auto-Build Disabled).")
 
     except KeyboardInterrupt:
         print("\n🔌 Disconnecting Synapse.")
@@ -375,8 +384,13 @@ def main():
     p_listen = subparsers.add_parser("listen", help="Listen to remote broadcast")
     p_listen.set_defaults(func=do_listen)
     
+    # Build
+    p_build = subparsers.add_parser("build", help="Trigger remote build manually")
+    p_build.set_defaults(func=do_build)
+    
     # Live
     p_live = subparsers.add_parser("live", help="Live mode (Watch + Push + Listen)")
+    p_live.add_argument("--no-auto-build", action="store_true", help="Disable automatic build triggering on file changes")
     p_live.set_defaults(func=do_live)
     
     args = parser.parse_args()
