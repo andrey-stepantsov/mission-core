@@ -116,12 +116,25 @@ ssh $HOST "ln -sf test/run.sh $LIB_DIR/lmk-test"
 # mk (Root Build)
 ssh $HOST "cat > $PROJECT_ROOT/mk" <<EOF
 #!/bin/bash
+set -e
 echo "🔨 Building Project0 (Root)..."
-# Simulate build by running the commands in compile_commands.json? Or just successfully compiling main?
-# For sim, let's just re-run the compile commands manually or rely on chaos generated 'lmk' equivalents if they existed.
-# Chaos generates simple build scripts? It generates 'lmk' in components.
-# Let's make 'mk' wrap the compilation of src.
+
+# 1. Compile Main
 g++ -I$PROJECT_ROOT/libs/lib0 -I$FRAMEWORK_DIR/include -c $PROJECT_ROOT/src/main.cpp -o $PROJECT_ROOT/src/main.o
+
+# 2. Link (Main + Lib0)
+# We assume Lib0 is already built (or we should build it here? For now assuming 'lmk' was run or we just link existing .o)
+# But ideally 'mk' should be recursive or we just manually link everything for this simple sim.
+if [ -f $PROJECT_ROOT/libs/lib0/lib0.c.o ]; then
+    LIB0_OBJ=$PROJECT_ROOT/libs/lib0/lib0.c.o
+else
+    echo "⚠️  Warning: lib0.c.o not found. Attempting to build lib0..."
+    (cd $PROJECT_ROOT/libs/lib0 && ./lmk)
+    LIB0_OBJ=$PROJECT_ROOT/libs/lib0/lib0.c.o
+fi
+
+g++ $PROJECT_ROOT/src/main.o \$LIB0_OBJ -o $PROJECT_ROOT/main
+
 echo "✅ Project0 Build Success"
 EOF
 ssh $HOST "chmod +x $PROJECT_ROOT/mk"
@@ -129,7 +142,9 @@ ssh $HOST "chmod +x $PROJECT_ROOT/mk"
 # mk-test (Root Verify)
 ssh $HOST "cat > $PROJECT_ROOT/mk-test" <<EOF
 #!/bin/bash
+set -e
 echo "🧪 Testing Project0..."
+$PROJECT_ROOT/main
 echo "✅ All Tests Passed"
 EOF
 ssh $HOST "chmod +x $PROJECT_ROOT/mk-test"

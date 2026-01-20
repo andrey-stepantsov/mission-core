@@ -200,14 +200,81 @@ def main():
 
         # LMK Script
         lmk_content = ["#!/bin/bash", "set -e"]
-        for src in c_files:
-             lmk_content.append(f"echo 'Compiling {src}...'")
-             lmk_content.append(f"touch {src}.o")
+        
+        # Compile all sources
+        for entry in local_compile_commands:
+            if "command" in entry:
+                cmd = entry["command"]
+            else:
+                # Reconstruct command from arguments
+                cmd = " ".join(entry["arguments"])
+            
+            # Adjust command to be relative or valid in the shell script context if needed
+            # The entries use absolute paths, which is fine.
+            lmk_content.append(f"echo 'Compiling {Path(entry['file']).name}...'")
+            lmk_content.append(cmd)
+
+        # Library Archive (optional, but good for linking)
+        # ar rcs libcomponent.a *.o
+        # For now, we leave .o files for the parent to link.
+        
         write_file(comp_path / "lmk", "\n".join(lmk_content))
         make_executable(comp_path / "lmk")
         
-        # Test Stub
-        write_file(comp_path / "test/run.sh", "#!/bin/bash\necho 'Test Passed'")
+        # Test Stub -> Real Test
+        # We need a main function to test the library.
+        test_src_name = "test_main.cpp" if "cpp" in style else "test_main.c"
+        test_src_path = comp_path / "test" / test_src_name
+        
+        # Determine test compiler flags
+        if "cpp" in style:
+            test_compiler = APP_COMPILER
+            test_flags = APP_FLAGS + includes
+            test_print = 'std::cout << "Test Passed" << std::endl;'
+            test_include = '#include <iostream>'
+        else:
+            test_compiler = DRIVER_COMPILER
+            test_flags = DRIVER_FLAGS + includes
+            test_print = 'printf("Test Passed\\n");'
+            test_include = '#include <stdio.h>'
+            
+        # Include component headers to verify they work
+        headers_inc = ""
+        for h in comp.get("headers", []):
+            headers_inc += f'#include "../{h}"\n'
+
+        test_code = f"""{test_include}
+{headers_inc}
+
+int main() {{
+    // Call the component function if possible. 
+    // We explicitly declared it in generate_header, e.g. void lib0();
+    {os.path.splitext(comp['name'])[0].replace("/", "_").split("_")[-1]}();
+    
+    {test_print}
+    return 0;
+}}
+"""
+        write_file(test_src_path, test_code)
+        
+        # Generate run.sh
+        test_run_content = ["#!/bin/bash", "set -e"]
+        # Compile test_main linking against component object
+        # We assume component objects are in ..
+        objs = [f"../{src}.o" for src in c_files]
+        objs_str = " ".join(objs)
+        
+        test_bin = "./test_bin"
+        
+        compile_cmd = f"{test_compiler} {' '.join(test_flags)} -o {test_bin} {test_src_path.name} {objs_str}"
+        
+        test_run_content.append(f"cd test")
+        test_run_content.append(f"echo 'Building Test...'")
+        test_run_content.append(compile_cmd)
+        test_run_content.append(f"echo 'Running Test...'")
+        test_run_content.append(f"{test_bin}")
+        
+        write_file(comp_path / "test/run.sh", "\n".join(test_run_content))
         make_executable(comp_path / "test/run.sh")
 
     # Write Root DB
