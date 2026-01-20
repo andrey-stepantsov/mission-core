@@ -224,11 +224,19 @@ def do_listen(args):
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         
         while True:
-            line = process.stdout.readline()
-            if not line:
+            raw_line = process.stdout.readline()
+            if not raw_line:
                 break
             
-            line = line.strip()
+            # Mirror to local file if requested
+            if hasattr(args, 'mirror_log') and args.mirror_log:
+                try:
+                    with open(args.mirror_log, 'a') as f:
+                        f.write(raw_line)
+                except Exception as e:
+                    pass # Don't crash listener on local IO error
+
+            line = raw_line.strip()
             if not line:
                 continue
                 
@@ -274,6 +282,16 @@ def do_live(args):
     
     # 1. Start Synthesis (The Radio) in a background thread
     print("👂 Connecting to The Radio...")
+
+    # Configure Log Mirroring to Hologram
+    # We mirror the remote build log to local hologram/.ddd/run/build.log
+    # This allows 'Local Smith' to see the logs as if they were local files.
+    mirror_path = os.path.join(HOLOGRAM_DIR, ".ddd", "run", "build.log")
+    os.makedirs(os.path.dirname(mirror_path), exist_ok=True)
+    args.mirror_log = mirror_path
+    
+    print(f"🪞 Mirroring logs to {mirror_path}")
+
     radio_thread = threading.Thread(target=do_listen, args=(args,), daemon=True)
     radio_thread.start()
     
@@ -382,6 +400,7 @@ def main():
     
     # Listen
     p_listen = subparsers.add_parser("listen", help="Listen to remote broadcast")
+    p_listen.add_argument("--mirror-log", help="Path to mirror raw log file locally")
     p_listen.set_defaults(func=do_listen)
     
     # Build
