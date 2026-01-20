@@ -41,12 +41,12 @@ if [ $? != 0 ]; then
     # Create detached session with environment variable
     # We restart the tmux server environment to be safe or pass via new-session env
     # Use bootstrap to ensure consistent venv usage
-    tmux new-session -d -s "$SESSION" "cd '$PROJECT_ROOT' && DDD_ROOT='$DDD_ROOT' PROJECT_ROOT='$PROJECT_ROOT' $BOOTSTRAP $DAEMON"
+    tmux new-session -d -s "$SESSION" "cd '$PROJECT_ROOT' && DDD_ROOT='$DDD_ROOT' PROJECT_ROOT='$PROJECT_ROOT' $DAEMON"
     
     # Launch Watcher in the first window
     # We use 'exec' so the pane doesn't close immediately if daemon exits (though daemon loops)
     # Actually, we want it to stay open.
-    tmux send-keys -t "$SESSION:0" "$BOOTSTRAP $DAEMON" C-m
+    tmux send-keys -t "$SESSION:0" "$DAEMON" C-m
     
     echo "Tower: Launched."
 else

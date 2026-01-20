@@ -48,7 +48,8 @@ else
     # Real Host Best Effort
     echo "   Attempting ssh-copy-id (You may be prompted for password)..."
     # We suppress output if successful, but show if it fails (which is fine if key exists)
-    ssh-copy-id -p $PORT -i ~/.ssh/id_rsa.pub $USER@$HOST 2>/dev/null || echo "   (ssh-copy-id skipped or failed, assuming access exists)"
+    # ssh-copy-id -p $PORT -i ~/.ssh/id_rsa.pub $USER@$HOST 2>/dev/null || echo "   (ssh-copy-id skipped or failed, assuming access exists)"
+    echo "   (Skipping ssh-copy-id as we assume keys are set up)"
 fi
 
 # 2. SSH Config Alias

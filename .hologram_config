@@ -1,3 +1,4 @@
 {
-    "host_target": "mission@mission-host"
+    "host_target": "mission-sim",
+    "remote_root": "/repos/projects/project0"
 }
