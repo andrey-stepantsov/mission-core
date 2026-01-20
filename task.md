@@ -12,5 +12,5 @@
 - [x] Verify `provision_remote` functionality <!-- id: 6 -->
     - [x] Run verification in simulation <!-- id: 7 -->
 - [x] Capture `walkthrough.md` <!-- id: 8 -->
-- [x] Commit and Tag `remote-brain-v1` <!-- id: 9 -->
-- [ ] Run Regression `tests/run_suite.sh` <!-- id: 10 -->
+- [x] Commit and Tag `remote-brain-v1` (v1.1 now) <!-- id: 9 -->
+- [x] Run Regression `tests/run_suite.sh` (Passed scope) <!-- id: 10 -->

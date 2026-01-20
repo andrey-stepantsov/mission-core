@@ -1,48 +1,41 @@
 # Remote Brain Provisioning Walkthrough
 
-We have consolidated the "Remote Brain" infrastructure into the standard provisioning workflow. This allows any remote host to be provisioned with `bear`, `clang`, and the necessary compilation database tooling (`auto_ghost`, `c_context`) to support high-fidelity remote development.
+We have consolidated the "Remote Brain" infrastructure into the standard provisioning workflow, adapted it for real-world non-root environments, and unified the Python bootstrap strategy.
 
-## 1. Updated Provisioning Script
-The `provision_remote` tool has been upgraded to:
--   **Deploy via Git**: Now pulls from `feature/remote-brain` (or current branch) instead of `rsync`.
--   **Clones DDD**: Ensures the `ddd` toolchain is present.
--   **Installs System Deps**: `bear`, `clang`, `build-essential`, `python3-pip`, `python3-venv`.
--   **Install Python Deps**: Installs requirements for `dd-daemon`.
+## 1. Features
+### A. Provisioning (`provision_remote`)
+-   **Git-Based Deployment**: Deploys `.mission` and `ddd` tools via git (feature branch support).
+-   **Non-Root Ready**: 
+    -   Removed `sudo apt-get`.
+    -   Now **checks** for existing `bear`, `clang`, `python3` installations.
+    -   Installs Python deps via `bootstrap.sh` (user-space venv).
+    -   Defaults to SSH port **22**.
+-   **Generic Args**: Supports `--host`, `--port`, `--user`, `--alias`.
 
-## 2. Updated Projector & Auto-Ghost
--   **Auto-Ghost**: Now supports `--full` flag to return both dependency list and compilation context (flags, directory).
--   **Projector**:
-    -   Uses `auto_ghost --full` during `pull`.
-    -   **Unified Compile DB**: Generates and maintains a single `compile_commands.json` in the `hologram/` root.
-    -   **Path Rewriting**: Automatically rewrites remote `-I` paths to point to locally synced `outside_wall` paths, enabling seamless LSP integration (Go to Definition works for dependencies!).
+### B. Unified Bootstrap (`bootstrap.sh`)
+-   **Single Point of Truth**: `provision_remote` and `launch_tower` now delegate to `tools/lib/bootstrap.sh`.
+-   **Arch-Specific Venv**: Respects architecture-specific venv naming (e.g., `.venv-Linux-x86_64-host`) handled within `bootstrap.sh`.
+-   **Isolation**: Ensures `dd-daemon` runs in the same isolated venv as Mission Tools.
 
-## 3. Verification
-We verified the workflow in the `mission-sim` environment:
-1.  **Provisioning**: Ran `provision_remote` to setup `mission-host`.
-2.  **Scaffolding**: Ran `setup_realistic_host.sh` to create `Project0` and generate a `Makefile`.
-3.  **Compiling**: Ran `make` on remote to generate the initial `compile_commands.json` (via `bear`).
-4.  **Projector Pull**:
-    -   Ran `projector pull src/main.cpp`.
-    -   Verified `src/main.cpp` was synced to `hologram/`.
-    -   Verified **185** implicit dependencies (including system headers like `<stdio.h>`) were synced to `outside_wall/`.
-    -   Verified `hologram/compile_commands.json` was created with correct local paths.
+### C. Compile DB & Auto-Ghost
+-   **Full Context**: `auto_ghost --full` returns dependency list + compilation flags/directory.
+-   **Local Hologram**: `projector` maintains a single unified `compile_commands.json` locally, rewriting remote paths (`-I/remote/...` -> `-I/local/outside_wall/...`) for seamless LSP support.
 
-```json
-[
-  {
-    "directory": "/Users/.../.mission/hologram/.",
-    "file": "/Users/.../.mission/hologram/src/main.cpp",
-    "arguments": [
-      "/usr/bin/g++",
-      "-I/Users/.../.mission/outside_wall/repos/projects/project0/libs/lib0",
-      "-I/Users/.../.mission/outside_wall/opt/framework0/include",
-      ...
-    ]
-  }
-]
+## 2. Verification
+Verified in `mission-sim` (with manual prerequisite installation to mimic real host):
+1.  **Provisioning**: `provision_remote --host localhost --port 2222 ...` succeeded.
+2.  **Bootstrap**: Confirmed `dd-daemon` launched via venv python.
+3.  **Projector Pull**: 
+    -   Pulled `src/main.cpp`.
+    -   Received 185 system headers in `outside_wall`.
+    -   Generated valid `compile_commands.json`.
+
+## 3. How to Use on Real Host
+```bash
+#  Prereqs: SSH access, bear, clang, python3 installed on host.
+.mission/tools/bin/provision_remote \
+  --host 192.168.1.50 \
+  --port 22 \
+  --user stepants \
+  --alias my-remote-dev
 ```
-
-## 4. Next Steps
--   Commit changes to `provision_remote`, `projector`, and `auto_ghost`.
--   Push to `feature/remote-brain`.
--   Test on a real physical host.
