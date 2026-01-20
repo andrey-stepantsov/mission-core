@@ -9,8 +9,12 @@
 
 SESSION="mission_tower"
 BIN_DIR="$(dirname "$0")"
-# Always use the local Lite daemon from this directory
-DAEMON="$BIN_DIR/dd-daemon"
+# Try dedicated DDD repo location first, fall back to same dir
+if [ -f "$BIN_DIR/../ddd/bin/dd-daemon" ]; then
+    DAEMON="$BIN_DIR/../ddd/bin/dd-daemon"
+else
+    DAEMON="$BIN_DIR/dd-daemon"
+fi
 
 # Calculate Project Root (Assuming this script is in .mission/tools/bin)
 # ../../../  -> Project Root
