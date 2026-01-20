@@ -64,12 +64,12 @@ EOF
     echo \"all:; @echo 'Simulated Build Success'\" > Makefile
 "
 
-# 5. Bootstrap & Verify
+    # 5. Bootstrap & Verify
 echo "   ✅ Verifying Environment..."
 ssh -o StrictHostKeyChecking=no "$TARGET" "
     cd $REMOTE_ROOT
-    chmod +x .mission/tools/bin/*
-    .mission/tools/bin/remote-test.sh
+    chmod +x .mission/bin/remote-test.sh
+    .mission/bin/remote-test.sh
 "
 
 echo "✨ Provisioning Complete! You can now run:"
