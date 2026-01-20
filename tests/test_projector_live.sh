@@ -46,7 +46,7 @@ docker exec -u neo mission-client bash -c "cd /mission/hologram_test_suite && /m
 
 # 4. Start Live Mode
 echo "   [4/6] Starting The Synapse..."
-docker exec -d -u neo mission-client bash -c "export PYTHONUNBUFFERED=1; cd /mission/hologram_test_suite && /mission/tools/bin/projector live > /tmp/live_test.log 2>&1"
+docker exec -d -u neo mission-client bash -c "export PYTHONUNBUFFERED=1; cd /mission/hologram_test_suite && /mission/tools/bin/projector live --auto-build > /tmp/live_test.log 2>&1"
 sleep 3 # Wait for startup
 
 # 5. Trigger Change
@@ -63,8 +63,9 @@ echo "   [5/6] Triggering Impulse..."
 # So hologram/home/oracle/foo -> /home/oracle/foo.
 # We need to make sure the local struct exists.
 
-docker exec -u neo mission-client bash -c "mkdir -p /mission/hologram_test_suite/hologram/home/oracle"
-docker exec -u neo mission-client bash -c "cd /mission/hologram_test_suite && touch hologram/home/oracle/test_live_suite.txt"
+# Flat structure for home dir mapping
+docker exec -u neo mission-client bash -c "mkdir -p /mission/hologram_test_suite/hologram"
+docker exec -u neo mission-client bash -c "cd /mission/hologram_test_suite && touch hologram/test_live_suite.txt"
 
 sleep 10 # Wait for debounce + sync + build + radio
 

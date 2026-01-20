@@ -1,0 +1,35 @@
+#!/bin/bash
+set -e
+
+# setup_hologram: Initializes a new client workspace ("Hologram")
+# Usage: ./setup_hologram <path_to_mission_core>
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <path_to_mission_core>"
+    echo "Example: $0 ~/dev/chaos/.mission"
+    exit 1
+fi
+
+MISSION_SOURCE="$(cd "$1" && pwd)"
+CURRENT_DIR="$(pwd)"
+
+echo "🔮 Initializing Hologram in $CURRENT_DIR..."
+
+# 1. Link .mission
+if [ -d ".mission" ]; then
+    echo "   .mission already exists."
+else
+    echo "   Linking .mission from $MISSION_SOURCE..."
+    ln -s "$MISSION_SOURCE" .mission
+fi
+
+# 2. Check for Antigravity Context
+# (This is where we would add specific config for the agent if needed)
+# For now, we ensure the tools are executable and path is clear.
+
+echo "   Verifying tools..."
+chmod +x .mission/tools/bin/* || echo "Warning: Some tools could not be chmod-ed"
+
+# 3. Reminder
+echo "✅ Hologram configured."
+echo "   Run '.mission/tools/bin/projector init' to connect to a remote brain."

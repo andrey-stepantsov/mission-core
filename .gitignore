@@ -41,3 +41,4 @@ data/logs/
 
 # Whitelist bin scripts
 !/bin/
+hologram_test_suite/

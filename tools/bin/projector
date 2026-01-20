@@ -77,8 +77,20 @@ def do_pull(args):
     """Pulls a file from the host."""
     config = load_config()
     host = config['host_target']
-    remote_path = args.file
+    remote_root = config.get('remote_root', '.')
     
+    input_path = args.file
+    
+    # Resolve Remote Path
+    if input_path.startswith("/"):
+        remote_path = input_path
+        # For absolute paths, we store them as full structure
+        rel_path = input_path.lstrip("/")
+    else:
+        # For relative paths, prepend remote_root
+        remote_path = f"{remote_root}/{input_path}".replace(os.path.sep, "/")
+        rel_path = input_path
+
     print(f"Pulling {remote_path} from {host}...")
     
     # 1. Verify file exists on host
@@ -86,8 +98,6 @@ def do_pull(args):
     run_command(["ssh"] + ssh_opts + [host, f"test -f {remote_path}"])
     
     # 2. Rsync file to hologram/
-    # Preserve directory structure
-    rel_path = remote_path.lstrip("/")
     local_dest = os.path.join(HOLOGRAM_DIR, rel_path)
     os.makedirs(os.path.dirname(local_dest), exist_ok=True)
     
