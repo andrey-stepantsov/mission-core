@@ -46,6 +46,10 @@ ssh $HOST "python3 -m pip install -r $REMOTE_MISSION/tools/ddd/requirements.txt"
 
 # 3. Create Chaos Plan
 echo "   Planting 'Project0' Chaos Plan..."
+# OVERRIDE: Copy local chaos.py to ensure we have the latest logic (supporting 'both' mode)
+# This handles the case where the cloned repo is behind our local development.
+scp .mission/tools/lib/chaos.py $HOST:$REMOTE_MISSION/tools/lib/chaos.py
+
 ssh $HOST "cat > /tmp/chaos_plan_project0.yaml" <<EOF
 root: $PROJECT_ROOT
 components:
@@ -54,7 +58,7 @@ components:
     headers: [lib0.h]
     sources: [lib0.c]
     style: driver_c_legacy
-    compile_db: local
+    compile_db: both
     external_includes: ["$SDK_DIR/include"]
 
   - name: src/root_app

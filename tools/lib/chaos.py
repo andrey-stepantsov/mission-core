@@ -186,10 +186,15 @@ def main():
             local_compile_commands.append(entry)
 
         # DB Placement
+        # DB Placement
         db_location = comp.get("compile_db", "root")
         if db_location == "root":
             root_compile_commands.extend(local_compile_commands)
         elif db_location == "local":
+            with open(comp_path / "compile_commands.json", "w") as f:
+                json.dump(local_compile_commands, f, indent=2)
+        elif db_location == "both":
+            root_compile_commands.extend(local_compile_commands)
             with open(comp_path / "compile_commands.json", "w") as f:
                 json.dump(local_compile_commands, f, indent=2)
 
