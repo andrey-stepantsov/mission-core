@@ -12,7 +12,7 @@ if [ ! -d "$VENV_DIR" ]; then
     printf "📦 Bootstrapping Python Environment...\n" >&2
     # Try system site-packages first (Docker optimization)
     python3 -m venv --system-site-packages "$VENV_DIR" || python3 -m venv "$VENV_DIR"
-    "$VENV_DIR/bin/pip" install --upgrade pip > /dev/null
+    "$VENV_DIR/bin/python3" -m pip install --upgrade pip > /dev/null
 fi
 
 # 2. Install Dependencies (Lazy Sync)
@@ -21,7 +21,7 @@ if [ -f "$REQ_FILE" ]; then
     CURRENT_HASH=$(shasum "$REQ_FILE" 2>/dev/null || md5sum "$REQ_FILE" | awk '{print $1}')
     if [ ! -f "$HASH_FILE" ] || [ "$(cat "$HASH_FILE")" != "$CURRENT_HASH" ]; then
         printf "📦 Syncing Universal Dependencies...\n" >&2
-        "$VENV_DIR/bin/pip" install -r "$REQ_FILE" > /dev/null
+        "$VENV_DIR/bin/python3" -m pip install -r "$REQ_FILE" > /dev/null
         echo "$CURRENT_HASH" > "$HASH_FILE"
     fi
 fi
