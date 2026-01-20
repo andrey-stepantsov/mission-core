@@ -95,6 +95,17 @@ else
      EXIT_CODE=1
 fi
 
+# --- 7. Feature: Projector Live (The Synapse) ---
+echo -n "[Feature] Testing Projector Live... "
+if bash "$TEST_DIR/test_projector_live.sh" > /dev/null 2>&1; then
+     echo -e "${GREEN}PASSED${NC}"
+else
+     echo -e "${RED}FAILED${NC}"
+     # Re-run for debug output if needed, or just let user check logs
+     # bash "$TEST_DIR/test_projector_live.sh"
+     EXIT_CODE=1
+fi
+
 echo "======================================"
 if [ $EXIT_CODE -eq 0 ]; then
     echo -e "Result: ${GREEN}SYSTEM HEALTHY${NC}"

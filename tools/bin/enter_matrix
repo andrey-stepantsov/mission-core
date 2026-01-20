@@ -22,18 +22,18 @@ HOST_CONTAINER="mission-host"
 sleep 3
 
 # Generate key in client if missing
-docker exec -u client $CLIENT_CONTAINER bash -c "[ -f ~/.ssh/id_rsa ] || ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa"
+docker exec -u neo $CLIENT_CONTAINER bash -c "[ -f ~/.ssh/id_rsa ] || ssh-keygen -t rsa -N '' -f ~/.ssh/id_rsa"
 
 # Get Public Key
-PUBKEY=$(docker exec -u client $CLIENT_CONTAINER cat ~/.ssh/id_rsa.pub)
+PUBKEY=$(docker exec -u neo $CLIENT_CONTAINER cat ~/.ssh/id_rsa.pub)
 
 # Push to Host
-docker exec $HOST_CONTAINER bash -c "mkdir -p /home/mission/.ssh && echo '$PUBKEY' >> /home/mission/.ssh/authorized_keys && chown mission:mission /home/mission/.ssh/authorized_keys"
+docker exec $HOST_CONTAINER bash -c "mkdir -p /home/oracle/.ssh && echo '$PUBKEY' >> /home/oracle/.ssh/authorized_keys && chown oracle:oracle /home/oracle/.ssh/authorized_keys"
 
 # 3. Enter Client
-echo "🟢 Matrix Loaded. You are now 'client' on the laptop."
-echo "   Target Host: mission-host (user: mission)"
-echo "   Try: ssh mission@mission-host 'ls -la'"
+echo "🟢 Matrix Loaded. You are now 'neo' on the laptop."
+echo "   Target Host: mission-host (user: oracle)"
+echo "   Try: ssh oracle@mission-host 'ls -la'"
 echo ""
 
-docker exec -it -u client $CLIENT_CONTAINER bash
+docker exec -it -u neo $CLIENT_CONTAINER bash

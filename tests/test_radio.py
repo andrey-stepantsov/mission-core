@@ -24,6 +24,9 @@ class TestRadioInfrastructure(unittest.TestCase):
         if os.path.exists("/repo/.mission-context"):
             # We are likely in the container
             self.assertIn("/repo/.mission-context", log_path)
+        elif os.path.exists("/mission/.mission-context"):
+             # We are in the mission container
+             self.assertIn("/mission/.mission-context", log_path)
         elif os.path.exists(".mission-context"):
             # We are on the host
             self.assertIn(".mission-context", log_path)

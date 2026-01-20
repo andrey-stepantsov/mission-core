@@ -22,10 +22,10 @@ export VERTEXAI_PROJECT="${VERTEXAI_PROJECT:-gen-lang-client-0140206225}"
 export VERTEXAI_LOCATION="${VERTEXAI_LOCATION:-us-central1}"
 IMAGE="aider-vertex"
 
-GIT_NAME=$(git config user.name || echo "Mission Developer")
-GIT_EMAIL=$(git config user.email || echo "dev@mission.core")
+GIT_NAME=$(git config user.name || echo "Neo")
+GIT_EMAIL=$(git config user.email || echo "neo@matrix.sim")
 
-if [ -x "$TOOLS_ROOT/bin/auto_ghost" ]; then GHOST_MOUNTS=$("$TOOLS_ROOT/bin/auto_ghost"); fi
+if [ -x "$TOOLS_ROOT/bin/auto_ghost" ]; then GHOST_MOUNTS=$(cd "$HOST_REPO_ROOT" && "$TOOLS_ROOT/bin/auto_ghost" --view ghost --format docker); fi
 if [ -x "$TOOLS_ROOT/bin/sync_ignore" ]; then "$TOOLS_ROOT/bin/sync_ignore" 2>/dev/null || true; fi
 
 TTY_FLAG=""

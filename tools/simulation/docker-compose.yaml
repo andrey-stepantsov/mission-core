@@ -20,12 +20,13 @@ services:
       dockerfile_inline: |
         FROM ubuntu:22.04
         RUN apt-get update && apt-get install -y openssh-server rsync git build-essential vim tmux python3 sudo
-        RUN mkdir /var/run/sshd
-        # User 'mission' with password 'mission'
-        RUN useradd -m -s /bin/bash mission && echo "mission:mission" | chpasswd
-        RUN echo "mission ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+        RUN mkdir -p /var/run/sshd
+        # User 'oracle' with password 'oracle'
+        RUN id -u oracle &>/dev/null || useradd -m -s /bin/bash oracle
+        RUN echo "oracle:oracle" | chpasswd
+        RUN echo "oracle ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
         # SSH Keys setup (allow key auth)
-        RUN mkdir -p /home/mission/.ssh && chmod 700 /home/mission/.ssh && chown mission:mission /home/mission/.ssh
+        RUN mkdir -p /home/oracle/.ssh && chmod 700 /home/oracle/.ssh && chown oracle:oracle /home/oracle/.ssh
     healthcheck:
       test: ["CMD", "service", "ssh", "status"]
       interval: 5s
@@ -52,4 +53,4 @@ services:
       dockerfile_inline: |
         FROM python:3.11-slim
         RUN apt-get update && apt-get install -y openssh-client rsync git vim tmux
-        RUN useradd -m -s /bin/bash client
+        RUN id -u neo &>/dev/null || useradd -m -s /bin/bash neo

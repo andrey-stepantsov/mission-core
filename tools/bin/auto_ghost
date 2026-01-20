@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import sys
 import os
 import subprocess
@@ -46,8 +47,11 @@ class DependencyScanner:
             return
 
         # Add to dependencies if it's not the root file (which starts at depth 0)
-        # Actually, we want to return ALL dependencies. The root file is the input.
-        # We record found dependencies.
+        # However, for 'auto_ghost', we want the file itself AND its dependencies?
+        # The prompt says: "implicit dependencies".
+        # If we are ghosting a file to the container, we probably want the file + deps.
+        # But if the file is the entry point, maybe we just want deps?
+        # Let's keep existing logic: depth > 0
         if depth > 0:
             self.dependencies.add(str(abs_path))
 
@@ -55,14 +59,9 @@ class DependencyScanner:
         try:
             content = abs_path.read_text(errors='ignore')
         except Exception as e:
-            # If we can't read it (e.g. permission), we can't scan it.
-            # But we still record it as a dependency since we found it.
             return
 
-        # Regex for includes: #include <...> or #include "..."
-        # We handle simple cases. Comments are ignored by regex widely, but valid C parser is better.
-        # For simplicity/speed: regex.
-        # This matches: #include <file> or #include "file"
+        # Regex for includes
         includes = re.findall(r'^\s*#\s*include\s+["<]([^">]+)[">]', content, re.MULTILINE)
 
         for header_name in includes:
@@ -70,54 +69,94 @@ class DependencyScanner:
             if resolved_path:
                 self.scan_file(resolved_path, depth + 1)
 
+# --- Weave Logic ---
+
+def get_weave_files(view_name, tools_root):
+    """Invokes the weave tool to get files for a view."""
+    weave_bin = Path(tools_root) / "bin" / "weave"
+    if not weave_bin.exists():
+        # Fallback to relative path if not found (e.g. running from repo root)
+        # Try to find standard location
+        weave_bin = Path(os.getcwd()) / ".mission" / "tools" / "bin" / "weave"
+        if not weave_bin.exists():
+             # Last resort: PATH?
+             weave_bin = Path("weave")
+    
+    try:
+        # We assume we are in the repo root for weave to find config, or weave handles it.
+        # We pass --expand to get contexts as well?
+        cmd = [str(weave_bin), "get", view_name, "--expand"]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
+        # Weave outputs space-separated files relative to repo root usually
+        files = result.stdout.strip().split()
+        return [str(Path(f).resolve()) for f in files if f]
+    except Exception as e:
+        print(f"Error invoking weave: {e}", file=sys.stderr)
+        return []
+
 # --- Main Script ---
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: auto_ghost <target_file>", file=sys.stderr)
-        sys.exit(1)
-
-    target_file = sys.argv[1]
-    repo_root = os.getcwd() # Assume run from repo root or correct CWD
+    parser = argparse.ArgumentParser(description="Auto-Ghost: Dependency Detector")
+    parser.add_argument("target_file", nargs="?", help="Specific file to scan")
+    parser.add_argument("--view", help="Weave view to load if no target file", default="ghost")
+    parser.add_argument("--format", choices=["json", "docker"], default="json", help="Output format")
     
-    # Locate c_context binary
+    args = parser.parse_args()
+    
+    repo_root = os.getcwd() # Assume run from repo root
     script_dir = Path(os.path.dirname(os.path.realpath(__file__)))
-    c_context_bin = script_dir / "c_context"
+    tools_root = script_dir.parent
     
-    if not c_context_bin.exists():
-        print(f"Error: c_context binary not found at {c_context_bin}", file=sys.stderr)
-        sys.exit(1)
+    all_files = set()
 
-    try:
-        # Step 1: Get Context (Include Paths)
-        cmd = [str(c_context_bin), target_file]
-        # Capture stdout for data, let stderr flow through to user (for bootstrap messages)
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
+    # Strategy 1: Target File
+    if args.target_file:
+        target_file = Path(args.target_file).resolve()
         
-        context_data = json.loads(result.stdout)
+        # Locate c_context binary
+        c_context_bin = script_dir / "c_context"
         
-        # Even if not found in DB, we continue to scan for relative includes
-        include_paths = context_data.get("includes", [])
+        if c_context_bin.exists():
+            try:
+                # Step 1: Get Context (Include Paths)
+                cmd = [str(c_context_bin), str(target_file)]
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
+                context_data = json.loads(result.stdout)
+                include_paths = context_data.get("includes", [])
+                
+                # Step 2: recursive scan
+                scanner = DependencyScanner(include_paths, repo_root)
+                scanner.scan_file(target_file)
+                
+                # Step 3: Collect
+                all_files.update(scanner.dependencies)
+                
+            except Exception as e:
+                 print(f"Error scanning {target_file}: {e}", file=sys.stderr)
+        else:
+            # Maybe just return the file itself if not C? or nothing?
+            # Existing behavior was error. Let's be lenient.
+            pass
+
+    # Strategy 2: Weave View
+    elif args.view:
+        # If no target file, use the view
+        files = get_weave_files(args.view, tools_root)
+        all_files.update(files)
         
-        # Step 2: recursive scan
-        scanner = DependencyScanner(include_paths, repo_root)
-        scanner.scan_file(target_file)
+    # Helpers for output
+    sorted_files = sorted(list(all_files))
+    
+    if args.format == "json":
+        print(json.dumps(sorted_files, indent=2))
         
-        # Step 3: Output unique list
-        # We only output files that exist on disk.
-        # Sort for determinism.
-        sorted_deps = sorted(list(scanner.dependencies))
-        
-        print(json.dumps(sorted_deps, indent=2))
-        
-    except subprocess.CalledProcessError as e:
-        print(f"Error running c_context: {e}", file=sys.stderr)
-        print(json.dumps([]))
-        sys.exit(0)
-    except json.JSONDecodeError:
-        print(f"Error parsing c_context output", file=sys.stderr)
-        print(json.dumps([]))
-        sys.exit(0)
+    elif args.format == "docker":
+        # -v /abs:/abs:ro
+        flags = []
+        for f in sorted_files:
+            flags.append(f"-v {f}:{f}:ro")
+        print(" ".join(flags))
 
 if __name__ == "__main__":
     main()
