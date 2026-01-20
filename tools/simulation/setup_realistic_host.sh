@@ -50,6 +50,10 @@ echo "   Planting 'Project0' Chaos Plan..."
 # This handles the case where the cloned repo is behind our local development.
 scp .mission/tools/lib/chaos.py $HOST:$REMOTE_MISSION/tools/lib/chaos.py
 
+# OVERRIDE: Copy local launch_tower as it might not be in the default git branch yet
+scp .mission/tools/bin/launch_tower $HOST:$REMOTE_MISSION/tools/bin/launch_tower
+ssh $HOST "chmod +x $REMOTE_MISSION/tools/bin/launch_tower"
+
 ssh $HOST "cat > /tmp/chaos_plan_project0.yaml" <<EOF
 root: $PROJECT_ROOT
 components:
@@ -71,7 +75,12 @@ components:
 
 ddd_config:
   project_root: "$PROJECT_ROOT"
-  build_command: "./mk"
+  targets:
+    dev:
+      build:
+        cmd: "./mk"
+      verify:
+        cmd: "./mk-test"
   test_command: "./mk-test"
 EOF
 
@@ -134,8 +143,12 @@ if [ "\$TARGET" == "lib0" ]; then
     cat > $PROJECT_ROOT/.ddd/config.json <<JSON
 {
   "project_root": "$LIB_DIR",
-  "build_command": "./lmk",
-  "test_command": "./test/run.sh"
+  "targets": {
+    "dev": {
+      "build": { "cmd": "cd $LIB_DIR && ./lmk" },
+      "verify": { "cmd": "cd $LIB_DIR && ./lmk-test" }
+    }
+  }
 }
 JSON
 elif [ "\$TARGET" == "root" ]; then
@@ -143,15 +156,26 @@ elif [ "\$TARGET" == "root" ]; then
     cat > $PROJECT_ROOT/.ddd/config.json <<JSON
 {
   "project_root": "$PROJECT_ROOT",
-  "build_command": "./mk",
-  "test_command": "./mk-test"
+  "targets": {
+    "dev": {
+      "build": { "cmd": "./mk" },
+      "verify": { "cmd": "./mk-test" }
+    }
+  }
 }
 JSON
 else
     echo "Usage: ./switch_ddd [root|lib0]"
     exit 1
 fi
-echo "✅ Switched."
+
+# Restarting Tower to pick up new config
+echo "♻️  Restarting Tower..."
+tmux kill-session -t mission_tower 2>/dev/null
+# Re-launch using launch_tower (must be in path or absolute)
+PROJECT_ROOT=$PROJECT_ROOT /home/$USER/.mission/tools/bin/launch_tower
+
+echo "✅ Switched & Restarted."
 EOF
 ssh $HOST "chmod +x $PROJECT_ROOT/switch_ddd"
 
