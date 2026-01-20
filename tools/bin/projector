@@ -48,7 +48,20 @@ def save_config(config):
 def do_init(args):
     """Initializes the hologram environment."""
     host_target = args.host_target
-    remote_root = args.remote_root.rstrip("/") if args.remote_root else "."
+    
+    # Support user@host:path syntax
+    if ":" in host_target:
+        parts = host_target.split(":", 1)
+        host_target = parts[0]
+        # Only override remote_root if not explicitly provided
+        if not args.remote_root or args.remote_root == ".":
+            remote_root = parts[1]
+        else:
+            remote_root = args.remote_root
+    else:
+        remote_root = args.remote_root
+        
+    remote_root = remote_root.rstrip("/") if remote_root else "."
     
     print(f"Initializing Hologram for host: {host_target} (Root: {remote_root})")
     
@@ -126,14 +139,20 @@ def do_pull(args):
     # We loaded config at start of do_pull
     remote_root = config.get('remote_root', '.')
     
-    # If remote_root is absolute, use it directly
+    # If remote_root is absolute, try it first
     if remote_root.startswith("/"):
         auto_ghost_bin = f"{remote_root}/.mission/tools/bin/auto_ghost"
     else:
         # Fallback to dynamic discovery
         auto_ghost_bin = "$(git rev-parse --show-toplevel 2>/dev/null || echo '.')/.mission/tools/bin/auto_ghost"
         
-    cmd_ghost = f"cd $(dirname {remote_path}) && {auto_ghost_bin} {remote_path}"
+    # Improved discovery: Check if it exists, if not try ~/.mission
+    # We construct a shell command that tries the project-local one first, then the home-global one
+    cmd_ghost = (
+        f"ghost_bin=\"{auto_ghost_bin}\"; "
+        f"if [ ! -f \"$ghost_bin\" ]; then ghost_bin=\"$HOME/.mission/tools/bin/auto_ghost\"; fi; "
+        f"cd $(dirname {remote_path}) && $ghost_bin {remote_path}"
+    )
     
     try:
         json_output = run_command(["ssh"] + ssh_opts + [host, cmd_ghost], capture_stderr=False)

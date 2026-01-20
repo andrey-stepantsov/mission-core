@@ -156,11 +156,33 @@ def main():
     repo_root = os.getcwd()
     config = load_config(repo_root)
     
-    db_paths = []
     if "--db" in sys.argv:
         db_paths = [sys.argv[sys.argv.index("--db") + 1]]
     else:
-        db_paths = ["compile_commands.json", "build/compile_commands.json"]
+        # Search upwards for compile_commands.json
+        current_dir = Path(os.getcwd())
+        root_markers = [".git", ".mission", "compile_commands.json"]
+        
+        search_paths = []
+        # Walk up until root
+        while True:
+            candidate = current_dir / "compile_commands.json"
+            if candidate.exists():
+                search_paths.append(str(candidate))
+                search_paths.append(str(current_dir / "build" / "compile_commands.json"))
+                break # Found the likely root
+            
+            parent = current_dir.parent
+            if parent == current_dir: # Reached filesystem root
+                break 
+            current_dir = parent
+            
+        # Fallback to CWD if nothing found
+        if not search_paths:
+             search_paths = ["compile_commands.json", "build/compile_commands.json"]
+             
+        db_paths = search_paths
+        
         if "compilation_dbs" in config:
             db_paths.extend(config["compilation_dbs"])
 
