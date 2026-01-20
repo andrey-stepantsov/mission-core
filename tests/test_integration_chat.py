@@ -12,6 +12,10 @@ mission_root = current_file.parent.parent
 lib_dir = mission_root / "tools" / "lib"
 sys.path.insert(0, str(lib_dir))
 
+# Enforce Shared Journal Path (Host side)
+# This defaults to .mission/.mission-context/mission_log.md which matches the container mount
+os.environ["MISSION_JOURNAL"] = str(mission_root / ".mission-context" / "mission_log.md")
+
 import radio
 
 # Agent Binaries

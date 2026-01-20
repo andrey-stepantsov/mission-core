@@ -1,0 +1,4 @@
+views:
+  ghost:
+    - ".mission/tools/bin/*"
+    - ".mission/tools/lib/*.py"
