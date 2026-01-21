@@ -260,6 +260,24 @@ def do_pull(args):
     rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", f"{host}:{remote_path}", local_dest]
     run_command(rsync_cmd)
     print(f"Synced to {local_dest}")
+
+    # 2b. Enforce Overlay: Hide from Outside Wall
+    # If the file exists in outside_wall, we must remove it so the hologram takes precedence.
+    wall_dest = os.path.join(OUTSIDE_WALL_DIR, rel_path)
+    if os.path.exists(wall_dest):
+        try:
+            # Ensure parent is writable if needed
+            parent_dir = os.path.dirname(wall_dest)
+            if not os.access(parent_dir, os.W_OK):
+                 try:
+                     os.chmod(parent_dir, 0o755)
+                 except: 
+                     pass
+            
+            os.remove(wall_dest)
+            print(f"👻 Ghosted (hidden) {wall_dest} from outside_wall")
+        except OSError as e:
+            print(f"Warning: Failed to hide {wall_dest} from outside_wall: {e}")
     
     # 3. Real Auto-Ghost (Dependency Syncing)
     print("Running Auto-Ghost logic...")
@@ -840,6 +858,45 @@ def do_retract(args):
         print(f"🗑️  Retracted {input_path} from hologram.")
     else:
         print(f"Warning: File {input_path} does not exist locally.")
+        
+    # 2b. Restore to Outside Wall (if remote exists)
+    # We stripped the hologram overlay, now we check if the base layer (remote) has it.
+    try:
+        rel_path = os.path.relpath(abs_path, hologram_abs)
+        host = config['host_target']
+        remote_root = config.get('remote_root', '.')
+        
+        # Calculate Remote Path
+        remote_root_stripped = remote_root.lstrip(os.path.sep)
+        if rel_path.startswith(remote_root_stripped):
+             remote_path = f"/{rel_path}".replace(os.path.sep, "/")
+        else:
+             remote_path = f"{remote_root}/{rel_path}".replace(os.path.sep, "/")
+
+        # Check Remote Existence
+        ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+        check_cmd = ["ssh"] + ssh_opts + [host, f"test -f {remote_path}"]
+        subprocess.check_call(check_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Restore
+        wall_dest = os.path.join(project_root, OUTSIDE_WALL_DIR, rel_path)
+        print(f"Restoring {wall_dest} from base layer...")
+        
+        os.makedirs(os.path.dirname(wall_dest), exist_ok=True)
+        
+        rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", f"{host}:{remote_path}", wall_dest]
+        if run_command(rsync_cmd): # run_command returns stdout, truthy?
+             pass 
+             
+        # Enforce Read-Only
+        os.chmod(wall_dest, 0o444)
+        print(f"🧱 Restored to Outside Wall.")
+        
+    except subprocess.CalledProcessError:
+        # Remote file doesn't exist, so nothing to restore
+        pass
+    except Exception as e:
+        print(f"Warning: Failed to restore to outside_wall: {e}")
         
     # 3. Update compile_commands.json
     db_path = os.path.join(hologram_abs, "compile_commands.json")

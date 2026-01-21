@@ -11,6 +11,7 @@ Retrieve a file from the remote host to the local hologram.
 ```bash
 projector pull <remote_absolute_path>
 ```
+*   **Overlay**: Hides the file from `outside_wall` (if present) to ensure the Hologram version takes precedence.
 *   **Auto-Ghost**: Automatically detects and pulls implicit dependencies (headers, etc.) to `outside_wall/`.
 
 ### 2. Build & Verify (Atomic)
@@ -30,10 +31,11 @@ projector log [-n lines]
 ```
 
 ### 4. Retract (Cleanup)
-Remove the file from the local hologram.
+Remove the file from the local hologram and restore the base layer.
 ```bash
 projector retract <local_file_path>
 ```
+*   **Restore**: If the file exists on the remote host (base layer), it is restored to `outside_wall` as Read-Only.
 
 ## Live Mode (Human)
 For interactive human use, you can enable the continuous "Synapse".
