@@ -491,6 +491,20 @@ def do_build(args):
     
     trigger_build(config, context_path)
     print("✅ Build triggered.")
+    
+    if hasattr(args, 'wait') and args.wait:
+        print("⏳ Waiting for build to complete...")
+        # Determine log path
+        remote_root = config.get('remote_root', '.')
+        
+        # NOTE: trigger_build MAY have updated last_context in config, but we need to reload it?
+        # trigger_build calls save_config.
+        config_reloaded = load_config()
+        target_root = config_reloaded.get('last_context', remote_root)
+        remote_log = f"{target_root}/.ddd/run/build.log"
+        
+        exit_code = monitor_build(config['host_target'], remote_log, stop_on_finish=True)
+        sys.exit(exit_code)
 
 def do_push(args, trigger=False):
     """Pushes a file back to the host."""
@@ -564,79 +578,127 @@ def do_push(args, trigger=False):
     else:
         print("Sync complete (No Trigger).")
 
+def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
+    """
+    Monitors the remote build log.
+    If stop_on_finish is True, returns 0 on SUCCESS, 1 on FAILURE.
+    Includes robust reconnection logic.
+    """
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+    
+    while True:
+        # Pre-Check (only for stop_on_finish)
+        # If the build already finished while we were connecting/reconnecting, we might miss the live signal using tail -f.
+        # So we check the tail of the file first.
+        if stop_on_finish:
+             try:
+                check_cmd = ["ssh"] + ssh_opts + [host, f"tail -n 50 {remote_log} 2>/dev/null"]
+                # Capture output, don't check=True because grep might fail? No, this is just tail.
+                res = subprocess.run(check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if res.returncode == 0:
+                    for line in res.stdout.splitlines():
+                        if "[MISSION COMPLETE]" in line or "BUILD_SUCCESS" in line:
+                            print(f"✅ [MISSION COMPLETE] (Detected in log history)", flush=True)
+                            return 0
+                        if "[MISSION FAILED]" in line or "BUILD_FAILURE" in line:
+                            print(f"❌ [MISSION FAILED] (Detected in log history)", flush=True)
+                            return 1
+             except Exception:
+                 pass # Ignore pre-check errors, fall through to stream
+
+        # Stream
+        cmd = ["ssh"] + ssh_opts + [host, f"tail -F {remote_log} 2>/dev/null"]
+        
+        try:
+            print(f"📡 Tuning into Mission Radio on {host}...", flush=True)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+            
+            while True:
+                raw_line = process.stdout.readline()
+                if not raw_line:
+                    # EOF means process died (SSH disconnect?)
+                    break
+                
+                # Mirror
+                if mirror_log:
+                    try:
+                        with open(mirror_log, 'a') as f:
+                            f.write(raw_line)
+                    except Exception:
+                        pass
+
+                line = raw_line.strip()
+                if not line:
+                    continue
+                    
+                if line.startswith("[RADIO]"):
+                    # Parse Signal
+                    payload_str = line[len("[RADIO]"):].strip()
+                    try:
+                        payload = json.loads(payload_str)
+                        event = payload.get("event")
+                        msg = payload.get("message")
+                        ts = payload.get("timestamp")
+                        
+                        if event == "BUILD_START":
+                            print(f"\n🚀 [MISSION START] {ts}", flush=True)
+                            print(f"   >> {msg}", flush=True)
+                        elif event == "BUILD_SUCCESS":
+                            print(f"✅ [MISSION COMPLETE] {ts}", flush=True)
+                            print(f"   >> {msg}\n", flush=True)
+                            if stop_on_finish: return 0
+                        elif event == "BUILD_FAILURE":
+                            print(f"❌ [MISSION FAILED] {ts}", flush=True)
+                            print(f"   >> {msg}\n", flush=True)
+                            if stop_on_finish: return 1
+                        else:
+                            print(f"ℹ️  [RADIO] {event}: {msg}", flush=True)
+                            
+                    except json.JSONDecodeError:
+                        print(f"⚠️  [RADIO CORRUPT] {line}", flush=True)
+                else:
+                    print(f"   [log] {line}", flush=True)
+            
+            # If we get here, the process ended (but wait didn't end).
+            # Means SSH dropped.
+            if process.poll() is None:
+                process.terminate()
+                
+            print("⚠️ connection lost...", flush=True)
+            
+        except KeyboardInterrupt:
+            print("\n👋 Radio off.")
+            if stop_on_finish: 
+                sys.exit(130) # Standard interrupt exit
+            return
+        except Exception as e:
+            print(f"Error listening: {e}")
+            
+        if stop_on_finish:
+            print("🔄 Reconnecting in 3s...", flush=True)
+            time.sleep(3)
+        else:
+            return # If not waiting for finish (interactive listen), just exit on break? 
+                   # Actually, legacy behavior was 'tail -F' which handles some retries, 
+                   # but SSH wrapper breaks that. 
+                   # For 'listen', user might prefer auto-reconnect too? 
+                   # Let's keep it robust for both.
+            print("🔄 Reconnecting in 3s...", flush=True)
+            time.sleep(3)
+
+
 def do_listen(args):
     """Listens to the Mission Radio (remote build logs)."""
     config = load_config()
     host = config['host_target']
     remote_root = config.get('remote_root', '.')
-    
-    # Prefer last_context (where the daemon is actually running)
     target_root = config.get('last_context', remote_root)
-    
-    # Location: .ddd/run/build.log
     remote_log = f"{target_root}/.ddd/run/build.log"
     
-    print(f"📡 Tuning into Mission Radio on {host}...")
-    print(f"   (Watching {remote_log})")
+    mirror_log = args.mirror_log if hasattr(args, 'mirror_log') else None
     
-    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-    
-    cmd = ["ssh"] + ssh_opts + [host, f"tail -F {remote_log} 2>/dev/null"]
-    
-    try:
-        # We process stdout line by line
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-        
-        while True:
-            raw_line = process.stdout.readline()
-            if not raw_line:
-                break
-            
-            # Mirror to local file if requested
-            if hasattr(args, 'mirror_log') and args.mirror_log:
-                try:
-                    with open(args.mirror_log, 'a') as f:
-                        f.write(raw_line)
-                except Exception as e:
-                    pass # Don't crash listener on local IO error
+    monitor_build(host, remote_log, stop_on_finish=False, mirror_log=mirror_log)
 
-            line = raw_line.strip()
-            if not line:
-                continue
-                
-            if line.startswith("[RADIO]"):
-                # Parse Signal
-                payload_str = line[len("[RADIO]"):].strip()
-                try:
-                    payload = json.loads(payload_str)
-                    event = payload.get("event")
-                    msg = payload.get("message")
-                    ts = payload.get("timestamp")
-                    
-                    # Visual Formatting
-                    if event == "BUILD_START":
-                        print(f"\n🚀 [MISSION START] {ts}", flush=True)
-                        print(f"   >> {msg}", flush=True)
-                    elif event == "BUILD_SUCCESS":
-                        print(f"✅ [MISSION COMPLETE] {ts}", flush=True)
-                        print(f"   >> {msg}\n", flush=True)
-                    elif event == "BUILD_FAILURE":
-                        print(f"❌ [MISSION FAILED] {ts}", flush=True)
-                        print(f"   >> {msg}\n", flush=True)
-                    else:
-                        print(f"ℹ️  [RADIO] {event}: {msg}", flush=True)
-                        
-                except json.JSONDecodeError:
-                    print(f"⚠️  [RADIO CORRUPT] {line}", flush=True)
-            else:
-                print(f"   [log] {line}", flush=True)
-                
-    except KeyboardInterrupt:
-        print("\n👋 Radio off.")
-        sys.exit(0)
-    except Exception as e:
-        print(f"Error listening: {e}")
-        sys.exit(1)
 
 
 
@@ -795,6 +857,37 @@ def do_retract(args):
         except Exception as e:
             print(f"Warning: Failed to update compile_commands.json: {e}")
 
+def do_log(args):
+    """Fetches the latest build log from the remote host."""
+    config = load_config()
+    host = config['host_target']
+    remote_root = config.get('remote_root', '.')
+    
+    # Prefer last_context (where the daemon is actually running)
+    target_root = config.get('last_context', remote_root)
+    remote_log = f"{target_root}/.ddd/run/build.log"
+    
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+    
+    # Default to cat, but support --lines
+    if args.lines:
+        cmd = ["ssh"] + ssh_opts + [host, f"tail -n {args.lines} {remote_log} 2>/dev/null"]
+    else:
+        cmd = ["ssh"] + ssh_opts + [host, f"cat {remote_log} 2>/dev/null"]
+        
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        if result.returncode != 0:
+            print(f"Error: Could not retrieve log from {host}:{remote_log}")
+            sys.exit(1)
+            
+        print(result.stdout, end='') 
+        
+    except Exception as e:
+        print(f"Error fetching log: {e}")
+        sys.exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="Projector Agent: Manage Remote Brain Hologram")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -826,10 +919,16 @@ def main():
     p_listen.add_argument("--mirror-log", help="Path to mirror raw log file locally")
     p_listen.set_defaults(func=do_listen)
     
+    # Log (Atomic)
+    p_log = subparsers.add_parser("log", help="Fetch remote build log (One-shot)")
+    p_log.add_argument("-n", "--lines", type=int, help="Number of lines to tail")
+    p_log.set_defaults(func=do_log)
+    
     # Build
     p_build = subparsers.add_parser("build", help="Trigger remote build manually")
     p_build.add_argument("--context-from", help="Derive build context from this file path")
     p_build.add_argument("--sync", help="Synchronize specific file before building")
+    p_build.add_argument("--wait", action="store_true", help="Wait for build completion and stream logs")
     p_build.set_defaults(func=do_build)
     
     # Live

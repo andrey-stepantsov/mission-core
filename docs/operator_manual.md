@@ -48,6 +48,15 @@ When you launch `.mission/dash`, you enter the **Mission Control Center**.
 | `.mission/shell` | Launch the container shell (Interactive). |
 | `.mission/shell make` | Run a build command inside the container (One-off). |
 
+### 📡 Remote Brain (Projector)
+| Command | Description |
+| :--- | :--- |
+| `projector pull <path>` | **Materialize.** Bring a remote file to local `hologram/`. |
+| `projector build --sync <file> --wait` | **Atomic Action.** Sync, Build, and Wait for Result. |
+| `projector log` | **Read Evidence.** Fetch remote build logs. |
+| `projector live` | **Synapse.** Continuous sync and log streaming. |
+
+
 ---
 
 ## 4. The Golden Rules
