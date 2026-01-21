@@ -45,6 +45,14 @@ projector grep "pattern" [optional/path]
 *   **Context**: Maps the remote path (e.g., `/repos/project/...`) to the local `hologram/...` path.
 *   **Clean History**: All remote commands, including grep, run with `unset HISTFILE` to prevent polluting the remote shell history.
 
+### AI Introspection
+To help AI agents understand the active compilation flags for a file (macros, includes, language standard), use the context command:
+```bash
+projector context <local_file_path>
+```
+Output is valid YAML, making it easy to parse. This is critical for resolving conditional compilation paths (`#ifdef`).
+
+
 ### 5. Retract (Cleanup)
 Remove the file from the local hologram and restore the base layer.
 ```bash

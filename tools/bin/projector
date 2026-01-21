@@ -1207,6 +1207,107 @@ def do_log(args):
         print(f"Error fetching log: {e}")
         sys.exit(1)
 
+def do_context(args):
+    """
+    Displays the compilation context for a file in a structured format for AI agents.
+    Read from local compile_commands.json.
+    """
+    project_root = find_project_root()
+    if not project_root:
+        print("Error: Hologram not initialized.")
+        sys.exit(1)
+        
+    hologram_dir = os.path.join(project_root, HOLOGRAM_DIR)
+    db_path = os.path.join(hologram_dir, "compile_commands.json")
+    
+    if not os.path.exists(db_path):
+        print(f"Error: {db_path} not found. Run 'projector pull' first.")
+        sys.exit(1)
+        
+    # Resolve Target File
+    target_path = os.path.abspath(args.file) # Local absolute
+    
+    # Load DB
+    try:
+        with open(db_path, 'r') as f:
+            db = json.load(f)
+    except Exception as e:
+        print(f"Error parsing compile_commands.json: {e}")
+        sys.exit(1)
+        
+    # Find Entry
+    # DB entries usually have "file" as absolute path (rewritten by projector)
+    entry = next((e for e in db if e.get("file") == target_path), None)
+    
+    if not entry:
+        # Try resolving via relative path matching?
+        # Sometimes DB has symlinks resolved or vice versa.
+        # But projector rewrites it to match hologram structure. 
+        # If user passes relative path, abspath should match.
+        print(f"Error: No compilation context found for {args.file}")
+        print("Tip: Run 'projector pull' to sync context.")
+        sys.exit(1)
+        
+    # Parse Command
+    import shlex
+    cmd_args = []
+    if "arguments" in entry:
+        cmd_args = entry["arguments"]
+    elif "command" in entry:
+        cmd_args = shlex.split(entry["command"])
+        
+    macros = []
+    includes = []
+    standard = None
+    
+    i = 0
+    while i < len(cmd_args):
+        arg = cmd_args[i]
+        
+        # Macros
+        if arg.startswith("-D"):
+            macros.append(arg[2:])
+            
+        # Standard
+        elif arg.startswith("-std="):
+            standard = arg[5:]
+            
+        # Includes
+        elif arg.startswith("-I"):
+            val = arg[2:]
+            if not val and i + 1 < len(cmd_args):
+                val = cmd_args[i+1]
+            if val: includes.append(val)
+        elif arg == "-isystem":
+            if i + 1 < len(cmd_args):
+                includes.append(cmd_args[i+1])
+        
+        i += 1
+        
+    # STRUCTURED OUTPUT (YAML-like for AI)
+    print(f"File: {os.path.relpath(target_path, project_root)}")
+    if standard:
+        print(f"Standard: {standard}")
+    
+    print("Macros:")
+    if macros:
+        for m in sorted(macros):
+            print(f"  - {m}")
+    else:
+        print("  (None)")
+        
+    print("Includes:")
+    if includes:
+        for inc in includes:
+            # Show paths relative to project root if internal
+            if inc.startswith(project_root):
+                rel = os.path.relpath(inc, project_root)
+                print(f"  - {rel}")
+            else:
+                print(f"  - {inc}")
+    else:
+        print("  (None)")
+
 def main():
     parser = argparse.ArgumentParser(description="Projector Agent: Manage Remote Brain Hologram")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1262,6 +1363,11 @@ def main():
     p_live = subparsers.add_parser("live", help="Live mode (Watch + Push + Listen)")
     p_live.add_argument("--auto-build", action="store_true", help="Enable automatic build triggering on file changes")
     p_live.set_defaults(func=do_live)
+    
+    # Context (AI)
+    p_context = subparsers.add_parser("context", help="Show AI-friendly compilation context")
+    p_context.add_argument("file", help="Local file path")
+    p_context.set_defaults(func=do_context)
     
     args = parser.parse_args()
     args.func(args)
