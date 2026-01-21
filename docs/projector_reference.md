@@ -31,12 +31,23 @@ If you need to check the logs without triggering a build:
 projector log [-n lines]
 ```
 
-### 4. Retract (Cleanup)
+### 4. Remote Ripgrep (Search)
+Search the remote codebase using `ripgrep` (must be installed on remote). The results are mapped to local hologram paths for VSCode clickability.
+```bash
+projector grep "pattern" [optional/path]
+```
+*   **Context**: Maps the remote path (e.g., `/repos/project/...`) to the local `hologram/...` path.
+*   **Clean History**: All remote commands, including grep, run with `unset HISTFILE` to prevent polluting the remote shell history.
+
+### 5. Retract (Cleanup)
 Remove the file from the local hologram and restore the base layer.
 ```bash
 projector retract <local_file_path>
+# OR
+projector retract --all
 ```
 *   **Restore**: If the file exists on the remote host (base layer), it is restored to `outside_wall` as Read-Only.
+*   **--all**: recursively removes ALL files from the hologram and checks for restoration. Use this to reset your workspace.
 
 ## Live Mode (Human)
 For interactive human use, you can enable the continuous "Synapse".
