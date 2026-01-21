@@ -26,6 +26,11 @@ loader.exec_module(projector)
 
 class TestProjectorContext(unittest.TestCase):
     def setUp(self):
+        # Create temp dir
+        import tempfile
+        import shutil
+        self.test_dir = tempfile.mkdtemp()
+        
         # Capture stdout
         self.held_stdout = io.StringIO()
         self.stdout_patcher = patch('sys.stdout', self.held_stdout)
@@ -52,6 +57,9 @@ class TestProjectorContext(unittest.TestCase):
         self.config_patcher.stop()
         self.run_command_patcher.stop()
         self.update_db_patcher.stop()
+        import shutil
+        if os.path.exists(self.test_dir):
+            shutil.rmtree(self.test_dir)
 
     def test_pull_ambiguous_context_warning(self):
         """
@@ -162,6 +170,45 @@ class TestProjectorContext(unittest.TestCase):
         output = self.held_stdout.getvalue()
         self.assertNotIn("Ambiguous compilation context", output)
         self.mock_update_db.assert_called()
+
+    def test_context_command_output(self):
+        """
+        Verifies that projector context prints correct YAML output from compile_commands.json.
+        """
+        args = MagicMock()
+        args.file = os.path.join(self.test_dir, "hologram/src/main.c")
+        
+        # Setup Fake Hologram
+        hologram_dir = os.path.join(self.test_dir, "hologram")
+        os.makedirs(os.path.join(hologram_dir, "src"), exist_ok=True)
+        db_path = os.path.join(hologram_dir, "compile_commands.json")
+        
+        # Write Mock DB
+        mock_db = [
+            {
+                "directory": hologram_dir,
+                "file": args.file,
+                "command": "gcc -DDEBUG -I/outside/include -isystem /usr/include -std=c99 -c main.c -o main.o"
+            }
+        ]
+        with open(db_path, 'w') as f:
+            json.dump(mock_db, f)
+
+        # Mock find_project_root to return test_dir
+        with patch.object(projector, 'find_project_root', return_value=self.test_dir):
+            # Run do_context
+            try:
+                projector.do_context(args)
+            except SystemExit:
+                 pass # It shouldn't exit on success, but just in case
+        
+        # Verify Output
+        output = self.held_stdout.getvalue()
+        self.assertIn("File: hologram/src/main.c", output)
+        self.assertIn("Standard: c99", output)
+        self.assertIn("- DEBUG", output)
+        self.assertIn("- /outside/include", output)
+        self.assertIn("- /usr/include", output)
 
 if __name__ == '__main__':
     unittest.main()

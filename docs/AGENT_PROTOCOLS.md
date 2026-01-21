@@ -36,4 +36,12 @@ Writes code or text to `.ddd/filters/`. Supports Markdown code blocks.
 
 ### 4. Run Verification
 Executes the shell command currently stored in `.ddd/config.json` ("verification_command") inside the container.
-> **Command:** `run verification`
+
+## 🧠 AI Code Analysis
+When analyzing C/C++ code, agents MUST understand the active compilation flags to correctly interpret conditional logic (`#ifdef`, etc.).
+
+### Projector Context
+Use `projector context <local_file>` to retrieve the active **Macros** and **Include Paths** for any file in the hologram.
+> **Command:** `projector context src/main.c`
+>
+> **Output:** Structured YAML listing active flags.
