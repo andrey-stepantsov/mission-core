@@ -8,16 +8,46 @@ Before launching the Mission Pack, ensure you have:
     *   **Environment Variable**: Alternatively, set `GOOGLE_APPLICATION_CREDENTIALS=/path/to/creds.json`.
 *   **Vertex AI API Enabled**: Ensure the project associated with your credentials has the Vertex AI API enabled.
 
-## 2. Quick Start
-The **Mission Launcher** (`tools/bin/up`) handles the entire lifecycle, including image building and environment setup.
+## 2. Setting Up a New "Ghost" Repository
+To deploy the Mission Pack into a new or existing project (The "Workplace"), follow the **Nested Ghost** pattern.
 
+### Step 1: Initialize the Workplace
+Create your project directory (if it doesn't exist).
 ```bash
-# 1. Clone the Repo (Recursively)
-git clone --recursive <repo_url> mission-pack
-cd mission-pack
+mkdir my-new-project
+cd my-new-project
+git init
+```
 
-# 2. Launch the Environment
-./tools/bin/up
+### Step 2: Summons the Mission Pack
+Add the Mission Pack as a "Ghost" submodule. It **must** be named `.mission` to act as the hidden engine.
+```bash
+# Add as a hidden submodule
+git submodule add -b main https://github.com/andrey-stepantsov/mission-core.git .mission
+
+# Initialize it
+git submodule update --init --recursive
+```
+
+### Step 3: Bootstrap the Tools
+Run the bootstrap script to ensure the `projector` and other tools are ready.
+```bash
+# This sets up local environment and linking if necessary
+./.mission/tools/bin/setup_hologram ./.mission
+```
+
+### Step 4: Connect to Remote (Projector Init)
+Configure the connection to your remote "Oracle" (Host).
+```bash
+# Usage: projector init <ssh_target> --remote-root <remote_path>
+./.mission/tools/bin/projector init user@mission-host --remote-root /repos/my-project
+```
+*   This creates `.hologram_config` and initializes the local `hologram/` directory.
+
+### Step 5: Verify
+Pull a file to test the connection.
+```bash
+./.mission/tools/bin/projector pull README.md
 ```
 
 ## 3. Architecture & Platform Specifics
