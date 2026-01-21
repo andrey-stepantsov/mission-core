@@ -25,19 +25,21 @@ else
     EXIT_CODE=1
 fi
 
-# --- 1. Host Radio ---
-echo -n "[Host] Testing Radio Logic... "
-if python3 "$TEST_DIR/test_radio.py" > /dev/null 2>&1; then
+# --- 1. Host Radio (Unit) ---
+echo -n "[Host] Testing Radio Logic (Unit)... "
+# Run via Devbox to ensure Python 3.8 and pytest
+if devbox run "pytest -m unit $TEST_DIR/test_radio.py" > /dev/null 2>&1; then
     echo -e "${GREEN}PASSED${NC}"
 else
     echo -e "${RED}FAILED${NC}"
-    python3 "$TEST_DIR/test_radio.py"
+    devbox run "pytest -m unit $TEST_DIR/test_radio.py"
     EXIT_CODE=1
 fi
 
-# --- 2. Container Radio ---
+# --- 2. Container Radio (Unit in Docker) ---
 echo -n "[Container] Testing Radio Logic (inside Docker)... "
 TOOLSMITH="$MISSION_ROOT/tools/bin/toolsmith_local"
+# We run with python3 direct execution to bypass unittest module discovery issues
 if "$TOOLSMITH" bash -c "python3 /mission/tests/test_radio.py" > /dev/null 2>&1; then
      echo -e "${GREEN}PASSED${NC}"
 else
@@ -45,7 +47,7 @@ else
     EXIT_CODE=1
 fi
 
-# --- 3. Director Startup ---
+# --- 3. Director Startup (Integration) ---
 echo -n "[Director] Testing Startup Latency... "
 DIRECTOR="$MISSION_ROOT/tools/bin/director"
 START=$(date +%s%N)
@@ -62,36 +64,35 @@ else
     EXIT_CODE=1
 fi
 
-# --- 4. Swarm Integration ---
+# --- 4. Swarm Integration (Integration) ---
 echo -n "[Swarm] Testing Agent Integration... "
-if python3 "$TEST_DIR/test_integration_chat.py" > /dev/null 2>&1; then
+if devbox run "pytest -m integration $TEST_DIR/test_integration_chat.py" > /dev/null 2>&1; then
      echo -e "${GREEN}PASSED${NC}"
 else
      echo -e "${RED}FAILED${NC}"
-     python3 "$TEST_DIR/test_integration_chat.py"
+     devbox run "pytest -m integration -v $TEST_DIR/test_integration_chat.py"
      EXIT_CODE=1
 fi
 
-# --- 5. Complex Scenario (The New Test) ---
+# --- 5. Complex Scenario (Unmarked) ---
 echo -n "[Scenario] Testing Configuration Lifecycle... "
-if python3 "$TEST_DIR/test_scenario_config_flow.py" > /dev/null 2>&1; then
+# Run as generic pytest
+if devbox run "pytest $TEST_DIR/test_scenario_config_flow.py" > /dev/null 2>&1; then
      echo -e "${GREEN}PASSED${NC}"
 else
      echo -e "${RED}FAILED${NC}"
      # Re-run to show output
-     python3 "$TEST_DIR/test_scenario_config_flow.py"
+     devbox run "pytest -v $TEST_DIR/test_scenario_config_flow.py"
      EXIT_CODE=1
 fi
 
-
-
-# --- 6. Feature: Log Replay ---
+# --- 6. Feature: Log Replay (Unmarked) ---
 echo -n "[Feature] Testing Log Replay... "
-if python3 "$TEST_DIR/test_feature_log_replay.py" > /dev/null 2>&1; then
+if devbox run "pytest $TEST_DIR/test_feature_log_replay.py" > /dev/null 2>&1; then
      echo -e "${GREEN}PASSED${NC}"
 else
      echo -e "${RED}FAILED${NC}"
-     python3 "$TEST_DIR/test_feature_log_replay.py"
+     devbox run "pytest -v $TEST_DIR/test_feature_log_replay.py"
      EXIT_CODE=1
 fi
 

@@ -1,6 +1,6 @@
-import unittest
 import os
 import sys
+import unittest
 from pathlib import Path
 
 # Add tools/lib to path
@@ -11,6 +11,17 @@ sys.path.insert(0, str(lib_dir))
 
 import radio
 
+# Conditional Pytest support
+try:
+    import pytest
+except ImportError:
+    pytest = None
+
+def unit_test(obj):
+    """Decorator to mark as unit test if pytest is present."""
+    return pytest.mark.unit(obj) if pytest else obj
+
+@unit_test
 class TestRadioInfrastructure(unittest.TestCase):
     def test_log_path_resolution(self):
         """Ensure the radio finds the correct log file based on environment."""
@@ -25,8 +36,8 @@ class TestRadioInfrastructure(unittest.TestCase):
             # We are likely in the container
             self.assertIn("/repo/.mission-context", log_path)
         elif os.path.exists("/mission/.mission-context"):
-             # We are in the mission container
-             self.assertIn("/mission/.mission-context", log_path)
+                # We are in the mission container
+                self.assertIn("/mission/.mission-context", log_path)
         elif os.path.exists(".mission-context"):
             # We are on the host
             self.assertIn(".mission-context", log_path)
@@ -45,3 +56,4 @@ class TestRadioInfrastructure(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

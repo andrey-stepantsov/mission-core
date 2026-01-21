@@ -16,13 +16,21 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed setup instructions.
 *   **Apple Silicon**: The launcher automatically performs a **Native Bootstrap** to build an ARM64-optimized image, ensuring high performance and stability.
 
 ## 🚀 Quick Start
-```
 # 1. Start the Agent
 ./tools/bin/up
 
 # 2. Run the Health Check Suite
-./tests/run_suite.sh
+# Requires Devbox (Python 3.8)
+devbox run ./tests/run_suite.sh
 ```
+
+## 🧪 Development
+We use **Devbox** to ensure a consistent **Python 3.8** environment associated with legacy production constraints.
+
+### Running Tests
+*   **Unit Tests (Fast)**: `devbox run "pytest -m unit"`
+*   **Integration Tests (Slow)**: `devbox run "pytest -m integration"`
+*   **Full Regression**: `./tests/run_suite.sh` (or `devbox run ./tests/run_suite.sh`)
 
 ## 🛠 Active Agents
 | Agent | Type | Role |

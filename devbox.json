@@ -1,6 +1,6 @@
 {
   "packages": [
-    "python@3.11",
+    "python@3.8",
     "gcc",
     "gnumake",
     "nodejs",
@@ -9,23 +9,20 @@
   ],
   "shell": {
     "init_hook": [
-      "echo '🚀 SRL Mission Pack Environment Loaded'",
-      
-      "# 1. Install Python Dependencies (ddd, ctx)",
+      "echo '🚀 SRL Mission Pack Environment Loaded (Python 3.8)'",
+      "# 1. Install Python Dependencies (ddd, ctx, test)",
       "if [ ! -d .venv ]; then",
       "  python -m venv .venv",
       "  source .venv/bin/activate",
-      "  pip install watchdog pathspec pyyaml",
+      "  pip install --upgrade pip",
+      "  pip install watchdog pathspec pyyaml pytest",
       "else",
       "  source .venv/bin/activate",
       "fi",
-
       "# 2. Add local tools to PATH",
       "export PATH=$PWD/bin:$PATH",
-      
       "# 3. Alias for easy mock generation",
       "alias gen-mock='python3 tests/gen_srl_mock.py'",
-      
       "# 4. Helper to start daemons",
       "alias start-daemon-root='cd /repos/mock-repo/srl-x/srl-repo && dd-daemon'",
       "alias start-daemon-sdk='cd /repos/mock-repo/srl-x/srl-repo/asic/sdk1 && dd-daemon'"
