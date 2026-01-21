@@ -42,3 +42,7 @@ data/logs/
 # Whitelist bin scripts
 !/bin/
 hologram_test_suite/
+hologram/
+outside_wall/
+regression_log.txt
+tools/bin/.hologram_config

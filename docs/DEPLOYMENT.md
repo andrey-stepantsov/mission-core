@@ -58,6 +58,19 @@ Pull a file to test the connection.
 ./.mission/tools/bin/projector pull README.md
 ```
 
+### Step 7: (Optional) Set up Devbox for Reproducibility
+To ensure you are using the exact tool versions (Python 3.8, rsync, ssh) regardless of your OS:
+1.  Install [Devbox](https://www.jetify.com/devbox/docs/installing_devbox/).
+2.  Initialize the environment in your workspace root:
+    ```bash
+    # If a devbox.json exists in the root (recommended):
+    devbox shell
+    
+    # Or rely on the mission pack's configuration:
+    # (Not recommended for top-level work)
+    ```
+3.  Your shell now has all necessary tools in `PATH`.
+
 ## 3. Architecture & Platform Specifics
 The system is built on `aider-vertex`, a Nix-based Docker image. The deployment behavior varies by platform to ensure stability.
 
