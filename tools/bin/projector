@@ -412,7 +412,8 @@ def do_pull(args):
     if args.flags:
         # Safe quoting for the remote shell
         safe_flags = shlex.quote(args.flags)
-        cmd_ghost += f" --flags {safe_flags}"
+        # Use = to ensure argparse doesn't confuse the value with a flag
+        cmd_ghost += f" --flags={safe_flags}"
     
     compile_context = None
     dependencies = []
@@ -436,22 +437,62 @@ def do_pull(args):
                 # If we have multiple candidates and no flags were used (or even if they were, but still vague)
                 # Check for ambiguity
                 if len(candidates) > 1:
-                    # Identify distinguishing flags
-                    print(f"⚠️  Ambiguous compilation context found for {os.path.basename(input_path)}.")
-                    print(f"   Defaulting to Candidate #1. Use --flags to refine selection.")
-                    print("")
-                    
-                    print("   Options:")
-                    for idx, cand in enumerate(candidates):
-                         cmd = cand.get("cmd_str", "???")
-                         # Simple extraction of -D and -I for display
-                         # Just display the whole command or truncated?
-                         # Displaying key flags is better.
-                         # Let's extract -D
-                         import re
-                         macros = re.findall(r'-D([a-zA-Z0-9_=\(\)]+)', cmd)
-                         print(f"   {idx+1}. {cmd[:60]}... (Macros: {', '.join(macros)})")
-                    print("")
+                     # Interactive Mode: If TTY, ask user
+                     if sys.stdin.isatty():
+                         print(f"\n⚠️  Ambiguous compilation context found for {os.path.basename(input_path)}.")
+                         print("   Multiple build targets define this file. Please select the correct context:")
+                         
+                         choices = []
+                         for idx, cand in enumerate(candidates):
+                              cmd = cand.get("cmd_str", "???")
+                              import re
+                              macros = re.findall(r'-D([a-zA-Z0-9_=\(\)]+)', cmd)
+                              macro_str = ', '.join(macros[:5]) # Limit to 5
+                              if len(macros) > 5: macro_str += "..."
+                              
+                              print(f"   [{idx+1}] Macros: {macro_str}")
+                              # print(f"       Command: {cmd[:80]}...")
+                         
+                         print(f"   [A] All of the above (Merged - Experimental)")
+                         print(f"   [C] Cancel")
+                         
+                         try:
+                             sel = input("\nSelect Context (1, 2, ..., A, C) [1]: ").strip()
+                             if not sel: sel = "1"
+                             
+                             if sel.lower() == 'c':
+                                 print("Selection cancelled.")
+                                 sys.exit(0)
+                             elif sel.lower() == 'a':
+                                 print("Merging all candidates not yet supported. Using #1.")
+                                 compile_context = candidates[0]
+                             else:
+                                 try:
+                                     idx = int(sel) - 1
+                                     if 0 <= idx < len(candidates):
+                                         compile_context = candidates[idx]
+                                         print(f"Selected candidate #{idx+1}")
+                                     else:
+                                          print(f"Invalid index. Defaulting to #1.")
+                                          compile_context = candidates[0]
+                                 except ValueError:
+                                     print(f"Invalid input. Defaulting to #1.")
+                                     compile_context = candidates[0]
+                                     
+                         except KeyboardInterrupt:
+                             print("\nSelection cancelled.")
+                             sys.exit(0)
+                     else:
+                        print(f"⚠️  Ambiguous compilation context found for {os.path.basename(input_path)}.")
+                        print(f"   Defaulting to Candidate #1. Use --flags to refine selection.")
+                        print("")
+                        print("   Options:")
+                        for idx, cand in enumerate(candidates):
+                             cmd = cand.get("cmd_str", "???")
+                             import re
+                             macros = re.findall(r'-D([a-zA-Z0-9_=\(\)]+)', cmd)
+                             print(f"   {idx+1}. {cmd[:60]}... (Macros: {', '.join(macros)})")
+                        print("")
             
     except Exception as e:
         print(f"Warning: Auto-Ghost failed or returned invalid data: {e}")
@@ -1528,7 +1569,24 @@ def main():
     p_repair = subparsers.add_parser("repair-headers", help="Sync missing system headers")
     p_repair.set_defaults(func=do_repair_headers)
     
-    args = parser.parse_args()
+    # Pre-process sys.argv to handle --flags "-D..." issue
+    # argparse confuses values starting with - as new flags.
+    # We convert ['--flags', '-D...'] to ['--flags=-D...']
+    argv_clean = []
+    i = 0
+    raw_args = sys.argv[1:]
+    while i < len(raw_args):
+        arg = raw_args[i]
+        if arg == "--flags" and i + 1 < len(raw_args):
+            val = raw_args[i+1]
+            if val.startswith("-"):
+                argv_clean.append(f"--flags={val}")
+                i += 2
+                continue
+        argv_clean.append(arg)
+        i += 1
+
+    args = parser.parse_args(argv_clean)
     args.func(args)
 
 if __name__ == "__main__":
