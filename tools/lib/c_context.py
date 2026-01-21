@@ -54,20 +54,55 @@ def get_compile_command(fpath, db_paths, required_flags=None):
         except:
             continue
 
-        for entry in db:
-            entry_file = Path(entry.get("file", "")).resolve()
-            if entry_file == abs_fpath:
+        for i, entry in enumerate(db):
+            entry_file_str = entry.get("file", "")
+            
+            # 1. Try exact string match (normalized)
+            is_match = False
+            is_sibling = False
+            
+            if entry_file_str == str(abs_fpath):
+                 is_match = True
+            
+            # 2. Try resolved path comparison if not matched yet
+            if not is_match:
+                 try:
+                     entry_file_p = Path(entry_file_str).resolve()
+                     if entry_file_p == abs_fpath:
+                         is_match = True
+                 except:
+                     pass
+
+            # 3. Header Fallback: If target is header, look for sibling source
+            if not is_match and abs_fpath.suffix in ['.h', '.hh', '.hpp']:
+                 try:
+                     entry_file_p = Path(entry_file_str).resolve()
+                     if entry_file_p.parent == abs_fpath.parent and \
+                        entry_file_p.stem == abs_fpath.stem and \
+                        entry_file_p.suffix in ['.c', '.cc', '.cpp', '.cxx']:
+                             is_sibling = True
+                 except:
+                     pass
+
+            if is_match or is_sibling:
                 cmd_str = ""
                 if "command" in entry:
                     cmd_str = entry["command"]
                 elif "arguments" in entry:
                     cmd_str = " ".join(entry["arguments"])
                 
+                # Clone entry to avoid mutating original DB
+                # Override 'file' to match target header so valid DB entry is created
+                final_entry = entry.copy()
+                final_entry["file"] = str(abs_fpath)
+                
                 candidates.append({
-                    "entry": entry,
+                    "entry": final_entry,
                     "cmd_str": cmd_str,
-                    "score": 0
+                    "score": 100 if is_match else 50,
+                    "type": "exact" if is_match else "sibling"
                 })
+
 
     total_candidates = len(candidates)
     stats = {
@@ -86,10 +121,15 @@ def get_compile_command(fpath, db_paths, required_flags=None):
     # 2. Score Candidates
     if required_flags:
         for cand in candidates:
-            score = 0
+            score = cand["score"] # Start with base score
             for flag in required_flags:
                 if flag in cand["cmd_str"]:
-                    score += 1
+                    score += 10 # Flags are important, but exact match is king? 
+                                # Actually, if exact match lacks flags, do we prefer sibling with flags?
+                                # Probably not. Exact match is usually correct file.
+                                # So let's make exact match worth 100, flags worth 1.
+                                # Wait, I set base_score to 100 or 50.
+                    score += 1     
             cand["score"] = score
             
         max_score = max(c["score"] for c in candidates)
@@ -102,8 +142,6 @@ def get_compile_command(fpath, db_paths, required_flags=None):
                  f"⚠️  TOO TIGHT: Found {total_candidates} entries, but NONE matched your selectors {required_flags}. Defaulting to first entry."
              )
         elif len(winners) > 1:
-             stats["warnings"].append(
-                 f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
              stats["warnings"].append(
                  f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
              )
@@ -156,10 +194,6 @@ def main():
         print("Usage: c_context.py <file> [--db <path>]")
         sys.exit(1)
 
-    target_file = sys.argv[1]
-    repo_root = os.getcwd()
-    config = load_config(repo_root)
-    
     target_file = sys.argv[1]
     repo_root = os.getcwd()
     config = load_config(repo_root)
@@ -218,6 +252,9 @@ def main():
     # Let's use Union.
     config_flags = config.get("context_selector", {}).get("required_flags", [])
     required_flags = list(set(config_flags + provided_flags))
+
+    # Debug
+
 
     match, stats = get_compile_command(target_file, db_paths, required_flags)
     

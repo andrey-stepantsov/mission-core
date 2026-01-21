@@ -111,6 +111,21 @@
                 "reveal": "always",
                 "panel": "dedicated"
             }
+        },
+        {
+            "label": "Projector Context (AI)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.mission/tools/bin/projector",
+            "args": [
+                "context",
+                "${file}"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "panel": "shared"
+            }
         }
     ],
     "inputs": [

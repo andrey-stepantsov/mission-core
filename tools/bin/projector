@@ -8,6 +8,7 @@ import shutil
 import time
 import threading
 import shlex
+import tempfile
 
 HOLOGRAM_DIR = "hologram"
 OUTSIDE_WALL_DIR = "outside_wall"
@@ -167,8 +168,8 @@ def update_local_compile_db(context, dependencies=None):
     # 1. Rewrite Directory
     # context['directory'] is the remote build directory.
     # We map this to hologram structure.
-    remote_dir = context.get('directory', '')
-    if remote_dir.startswith(remote_root):
+    remote_dir = context.get('directory') or ''
+    if remote_root and remote_dir.startswith(remote_root):
         rel_dir = os.path.relpath(remote_dir, remote_root)
         local_dir = os.path.join(hologram_abs, rel_dir)
     else:
@@ -177,8 +178,8 @@ def update_local_compile_db(context, dependencies=None):
         
     # 2. Rewrite File
     # context['file'] is remote absolute path
-    remote_file = context.get('file', '')
-    if remote_file.startswith(remote_root):
+    remote_file = context.get('file') or ''
+    if remote_root and remote_file.startswith(remote_root):
         rel_file = os.path.relpath(remote_file, remote_root)
         local_file = os.path.join(hologram_abs, rel_file)
     else:
@@ -188,7 +189,16 @@ def update_local_compile_db(context, dependencies=None):
         
     # 3. Rewrite Arguments
     # Rewrite -I /abs/path -> -I .../outside_wall/abs/path
-    args = context.get('arguments', [])
+    args = context.get('arguments')
+    
+    # Fallback: if 'arguments' is missing, parse 'command' string
+    if not args:
+        cmd_str = context.get('command')
+        if cmd_str:
+            import shlex
+            args = shlex.split(cmd_str)
+            
+    args = args or []
     new_args = []
     
     i = 0
@@ -222,10 +232,22 @@ def update_local_compile_db(context, dependencies=None):
                 mapped_path = os.path.join(outside_wall_abs, value.lstrip("/"))
                 
                 # Check if we should enforce mapping or keep original?
-                # Ideally, if we synced it, it exists.
-                # If we didn't sync it (e.g. standard lib), maybe we shouldn't rewrite?
-                # But typically we want to point to our 'sysroot'.
-                # Let's map it.
+                # Ideal: if exists locally, map it.
+                if os.path.exists(mapped_path):
+                     value = mapped_path
+                else:
+
+                     # If not mapped, do we keep original? 
+                     # Current logic: we probably want to create the entry anyway?
+                     # No, logic below (lines 240+) APPENDS to new_args ONLY IF we append `value`.
+                     # If we don't update `value` here, we might just keep the original absolute path?
+                     # Wait. The original code did: `if os.path.exists(mapped_path): value = mapped_path`.
+                     # If NOT exists, `value` stays original absolute path `/repos/...`.
+                     # BUT then compile_commands.json has `/repos/...`. 
+                     # Clangd local sees `/repos/...`.
+                     # /repos does not exist locally. So Clangd ignores it.
+                     # So effective result: dropped.
+                     pass
                 
                 if consumed_next:
                     new_args.append(flag)
@@ -264,7 +286,26 @@ def update_local_compile_db(context, dependencies=None):
             new_args.append(f"-I{d}")
             
         for d in sorted(list(system_dirs)):
-            new_args.append(f"-isystem{d}")
+            new_args.append(f"-isystem")
+            new_args.append(d)
+
+    # 4. Inject Missing System Headers (Global Config)
+    system_includes = config.get("system_includes", [])
+    if system_includes:
+        existing_paths = set()
+        # Scan current new_args for existing -isystem paths to avoid dupes
+        for i in range(len(new_args)):
+             if new_args[i] == "-isystem" and i+1 < len(new_args):
+                  existing_paths.add(new_args[i+1])
+             elif new_args[i].startswith("-isystem"):
+                  existing_paths.add(new_args[i][8:])
+                  
+        for sys_inc in system_includes:
+             # Rewrite to outside_wall
+             mapped = os.path.join(outside_wall_abs, sys_inc.lstrip("/"))
+             if mapped not in existing_paths:
+                  new_args.append("-isystem")
+                  new_args.append(mapped)
         
     entry = {
         "directory": local_dir,
@@ -291,7 +332,7 @@ def update_local_compile_db(context, dependencies=None):
         
     print(f"Updated compile_commands.json for {os.path.basename(local_file)}")
 
-    print(f"Updated compile_commands.json for {os.path.basename(local_file)}")
+
 
 def do_pull(args):
     """Pulls a file from the host."""
@@ -380,6 +421,7 @@ def do_pull(args):
         json_output = run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; {cmd_ghost}"], capture_stderr=False)
         data = json.loads(json_output)
         
+
         # Handle both old (list) and new (dict) formats for backward compatibility
         if isinstance(data, list):
             dependencies = data
@@ -416,32 +458,70 @@ def do_pull(args):
 
     print(f"Auto-Ghost found {len(dependencies)} implicit dependencies.")
     
-    # Update local compile database if context was provided
-    update_local_compile_db(compile_context, dependencies)
+    # MOVED: update_local_compile_db(compile_context, dependencies) to after sync
 
-    # Step 3b: Sync Dependencies to Outside Wall
-    for dep_path in dependencies:
-        if not dep_path.startswith("/"):
-             continue 
-
-        # Map to outside_wall
-        # Remove leading slash to resolve against OUTSIDE_WALL_DIR
-        rel_dep = dep_path.lstrip("/")
-        dest_path = os.path.join(OUTSIDE_WALL_DIR, rel_dep)
+    # Step 3b: Batch Sync Dependencies to Outside Wall
+    if dependencies:
+        valid_deps = [d for d in dependencies if d.startswith("/")]
         
-        if os.path.exists(dest_path):
-             os.chmod(dest_path, 0o644) # Make writable for rsync
+        if valid_deps:
+            print(f"  Ghosting {len(valid_deps)} dependencies (Batch Optimized)...")
+            
+            # 1. Prepare Permissions (Write Access)
+            for dep in valid_deps:
+                rel = dep.lstrip("/")
+                local = os.path.join(OUTSIDE_WALL_DIR, rel)
+                if os.path.exists(local):
+                     try:
+                         os.chmod(local, 0o644)
+                     except: pass
+            
+            # 2. Create Temp List
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp:
+                tmp_path = tmp.name
+                for dep in valid_deps:
+                    tmp.write(dep + "\n")
+            
+            # 3. Batch Rsync
+            # Sync from host root "/" to OUTSIDE_WALL_DIR using the file list
+            rsync_cmd = [
+                "rsync", "-az", 
+                "--files-from", tmp_path,
+                "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", 
+                f"{host}:/", 
+                OUTSIDE_WALL_DIR
+            ]
+            
+            try:
+                run_command(rsync_cmd)
+            except Exception as e:
+                print(f"  Batch ghosting failed: {e}")
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
 
-        # Sync it
-        print(f"  Ghosting: {dep_path}")
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        ghost_rsync = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", f"{host}:{dep_path}", dest_path]
-        try:
-            run_command(ghost_rsync)
-            # Enforce The Wall (Read-Only)
-            os.chmod(dest_path, 0o444)
-        except Exception as e:
-            print(f"  Failed to ghost {dep_path}: {e}")
+            # 4. Enforce Read-Only
+            for dep in valid_deps:
+                rel = dep.lstrip("/")
+                local = os.path.join(OUTSIDE_WALL_DIR, rel)
+                if os.path.exists(local):
+                     try:
+                         os.chmod(local, 0o444)
+                     except: pass
+    
+    # Step 4: Update local compile database (AFTER syncing dependencies)
+    if compile_context:
+        # CRITICAL: Override the file path to match the requested file (e.g. header)
+        # because auto_ghost may have returned context for a sibling source file.
+        compile_context['file'] = remote_path
+        
+        # DEBUG: Inspect context
+        # import json # REMOVED
+        # Removed full dump as it might be large, just keys and null check
+
+
+        print(f"Updating compile_commands.json for {args.file}")
+        update_local_compile_db(compile_context, dependencies)
 
 
 
@@ -1207,6 +1287,81 @@ def do_log(args):
         print(f"Error fetching log: {e}")
         sys.exit(1)
 
+def do_repair_headers(args):
+    """Syncs system headers from the remote host."""
+    config = load_config()
+    host = config['host_target']
+    remote_root = config.get('remote_root', '.')
+    
+    print("🚑  Repairing System Headers...")
+    
+    # 1. Find or Deploy sys_headers.py
+    # We assume it's in ~/.mission/tools/lib/sys_headers.py (deployed by init/pull)
+    # But let's verify path relative to remote_root if possible or fallback
+    
+    # Force use of home directory for tools as fallback/default
+    # consistently with our manual deployment in previous steps
+    sys_headers_bin = "~/.mission/tools/lib/sys_headers.py"
+         
+    cmd = f"chmod +x {sys_headers_bin} && {sys_headers_bin}"
+    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+    
+    try:
+        print("   Querying remote compiler for default includes...")
+        result = subprocess.run(["ssh"] + ssh_opts + [host, cmd], 
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        if result.returncode != 0:
+            print(f"Error querying headers: {result.stderr}")
+            # Try fallback to hardcoded if script missing?
+            sys.exit(1)
+            
+        includes = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        
+        if not includes:
+            print("Warning: No system includes found.")
+            return
+
+        print(f"   Found {len(includes)} system include paths.")
+        
+        # 2. Sync to Outside Wall
+        # Loop through includes and sync each recursively.
+        # --files-from with directories can be tricky regarding recursion with older rsync.
+        
+        print(f"   Syncing {len(includes)} paths (recursive)...")
+        
+        for inc in includes:
+             # Ensure we don't sync obvious root paths or massive dirs accidentally? 
+             # (Compiler gives specific include dirs, usually safe)
+             print(f"     - {inc}")
+             rsync_cmd = [
+                "rsync", "-azR", # -R preserves full path (e.g. /usr/include -> outside_wall/usr/include)
+                "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+                f"{host}:{inc}", 
+                OUTSIDE_WALL_DIR
+             ]
+             try:
+                 subprocess.run(rsync_cmd, check=True, stderr=subprocess.PIPE)
+             except subprocess.CalledProcessError as e:
+                 print(f"       Warning: Failed to sync {inc}: {e}")
+                 # Continue to next
+        
+        # 3. Save to Config
+        # We need to persist these so update_local_compile_db can use them
+        config["system_includes"] = includes
+        save_config(config)
+        
+        # 4. Update Compile DB
+        # We call update_local_compile_db with an empty context just to trigger the rewrite with new flags
+        print("   Updating compilation database...")
+        update_local_compile_db({})
+        
+        print("✅  System headers repaired and synced.")
+        
+    except Exception as e:
+        print(f"Repair failed: {e}")
+        sys.exit(1)
+
 def do_context(args):
     """
     Displays the compilation context for a file in a structured format for AI agents.
@@ -1368,6 +1523,10 @@ def main():
     p_context = subparsers.add_parser("context", help="Show AI-friendly compilation context")
     p_context.add_argument("file", help="Local file path")
     p_context.set_defaults(func=do_context)
+
+    # Repair Headers
+    p_repair = subparsers.add_parser("repair-headers", help="Sync missing system headers")
+    p_repair.set_defaults(func=do_repair_headers)
     
     args = parser.parse_args()
     args.func(args)

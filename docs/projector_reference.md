@@ -14,6 +14,7 @@ projector pull <remote_absolute_path>
 *   **Overlay**: Hides the file from `outside_wall` (if present) to ensure the Hologram version takes precedence.
 *   **Auto-Ghost**: Automatically detects and pulls implicit dependencies (headers, etc.) to `outside_wall/`.
 *   **LSP Configuration**: Automatically updates `compile_commands.json` with correct include paths (`-I` and `-isystem`) pointing to the local `outside_wall`, enabling full `clangd` support.
+*   **System Headers**: Does not pull standard headers by default (e.g. `/usr/include`). Use `projector repair-headers` to sync them.
 *   **Context Selection**: If multiple build contexts exist for the file (e.g. different macros), use `--flags` to specify which one to use.
     ```bash
     projector pull src/main.c --flags "-DDEBUG -O0"
@@ -62,6 +63,14 @@ projector retract --all
 ```
 *   **Restore**: If the file exists on the remote host (base layer), it is restored to `outside_wall` as Read-Only.
 *   **--all**: recursively removes ALL files from the hologram and checks for restoration. Use this to reset your workspace.
+
+### 6. Repair Headers (One-time)
+Sync system headers (e.g. from `/usr/include`, `/opt/toolchain/...`) from the remote host to the local `outside_wall`. This is critical for `clangd` to resolve standard library and toolchain headers.
+```bash
+projector repair-headers
+```
+*   **Syncs**: Queries the remote compiler for default include paths and `rsync`s them locally.
+*   **Updates**: Automatically refreshes `compile_commands.json` to include these system paths.
 
 ## Live Mode (Human)
 For interactive human use, you can enable the continuous "Synapse".
