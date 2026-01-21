@@ -95,11 +95,25 @@ class TestProjectorLSP(unittest.TestCase):
         # Verify system includes (-isystem)
         # /usr/include -> outside_wall/usr/include
         expected_usr_inc = os.path.join(self.outside_wall_dir, "usr/include")
-        self.assertIn(f"-isystem{expected_usr_inc}", args)
+        # Note: Implementation logic adds -isystem and path as SEPARATE arguments
+        self.assertIn("-isystem", args)
         
         # /opt/lib -> outside_wall/opt/lib
         expected_opt_inc = os.path.join(self.outside_wall_dir, "opt/lib")
-        self.assertIn(f"-isystem{expected_opt_inc}", args)
+        # Check that -isystem and path are adjacent or combined?
+        # Implementation appends them as separate arguments: ['-isystem', 'path']
+        # search for index of -isystem and check next arg
+        self.assertIn("-isystem", args)
+        indices = [i for i, x in enumerate(args) if x == "-isystem"]
+        found_usr = False
+        found_opt = False
+        for idx in indices:
+            if idx + 1 < len(args):
+                if args[idx+1] == expected_usr_inc: found_usr = True
+                if args[idx+1] == expected_opt_inc: found_opt = True
+        
+        self.assertTrue(found_usr, f"Could not find -isystem followed by {expected_usr_inc}")
+        self.assertTrue(found_opt, f"Could not find -isystem followed by {expected_opt_inc}")
 
     def test_update_local_compile_db_rewrites_existing_flags(self):
         # Setup

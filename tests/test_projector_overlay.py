@@ -79,6 +79,7 @@ class TestProjectorOverlay:
         # execute PULL
         args = MagicMock()
         args.file = rel_path
+        args.flags = None
         projector.do_pull(args)
         
         # VERIFY:

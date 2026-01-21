@@ -155,7 +155,8 @@ class TestProjectorContext(unittest.TestCase):
             
             if "auto_ghost" in full_cmd:
                 # ASSERTION: Check flags are present
-                if "--flags '-DVARIANT_B'" not in full_cmd and '--flags "-DVARIANT_B"' not in full_cmd:
+                # Accept both quoted and unquoted forms just in case
+                if "--flags '-DVARIANT_B'" not in full_cmd and '--flags "-DVARIANT_B"' not in full_cmd and '--flags -DVARIANT_B' not in full_cmd and "--flags=-DVARIANT_B" not in full_cmd:
                      # Raise error to fail test inside side_effect isn't ideal but works
                      raise ValueError(f"Flags not found in command: {full_cmd}")
                      

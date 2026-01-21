@@ -111,8 +111,14 @@ def do_init(args):
 
     # 5. Deploy VSCode Configuration
     deploy_vscode_config(remote_root)
+    
+    # 6. Verify System Headers (Proactive Suggestion)
+    sys_includes = config.get("system_includes", [])
+    if not sys_includes:
+        print("\n⚠️  Suggestion: Run 'projector repair-headers' to enable full IntelliSense.")
+        print("   This syncs system headers (e.g. stdio.h) which are missing by default.")
 
-def deploy_vscode_config(remote_root):
+def deploy_vscode_config(remote_root, template_dir=None):
     """Deploys VSCode configuration templates if they exist."""
     print("Deploying VSCode configuration...")
     
@@ -120,18 +126,21 @@ def deploy_vscode_config(remote_root):
     # The projector script is in .mission/tools/bin/projector
     # So templates should be in .mission/templates/vscode
     
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    # script_dir = .../.mission/tools/bin
-    mission_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
-    # mission_root = .../.mission (if running from source) or just use relative if trustworthy
-    
-    # More robust finding strategy:
-    # 1. Check relative to script location
-    template_src = os.path.join(script_dir, "../../templates/vscode")
-    
-    if not os.path.exists(template_src):
-        # 2. Check CWD/.mission (setup scenario)
-        template_src = os.path.join(os.getcwd(), ".mission", "templates", "vscode")
+    if not template_dir:
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        # script_dir = .../.mission/tools/bin
+        mission_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+        # mission_root = .../.mission (if running from source) or just use relative if trustworthy
+        
+        # More robust finding strategy:
+        # 1. Check relative to script location
+        template_src = os.path.join(script_dir, "../../templates/vscode")
+        
+        if not os.path.exists(template_src):
+            # 2. Check CWD/.mission (setup scenario)
+            template_src = os.path.join(os.getcwd(), ".mission", "templates", "vscode")
+    else:
+        template_src = template_dir
         
     if os.path.exists(template_src):
         target_vscode = os.path.join(os.getcwd(), ".vscode")
@@ -145,7 +154,81 @@ def deploy_vscode_config(remote_root):
                     shutil.copy2(s, d)
                     print(f"  Created {item}")
                 else:
-                    print(f"  Skipped {item} (already exists)")
+                    # Smart Merge for JSON files
+                    if item.endswith(".json"):
+                        try:
+                            with open(s, 'r') as f_src:
+                                template_data = json.load(f_src)
+                            
+                            try:
+                                with open(d, 'r') as f_dst:
+                                    existing_data = json.load(f_dst)
+                            except json.JSONDecodeError:
+                                # If existing file is corrupt or empty, overwrite?
+                                # Safer to backup and copy
+                                print(f"  Warning: Existing {item} is invalid JSON. Backing up and overwriting.")
+                                shutil.copy2(d, d + ".bak")
+                                shutil.copy2(s, d)
+                                continue
+
+                            merged = False
+                            
+                            # Specific Merge Logic
+                            # 1. settings.json: merge clangd.arguments
+                            if item == "settings.json":
+                                # Merge clangd.arguments list (append unique?) or overwrite?
+                                # Template is usually critical for correct Clangd operation.
+                                # Let's ensure our args are present.
+                                tmpl_args = template_data.get("clangd.arguments", [])
+                                exist_args = existing_data.get("clangd.arguments", [])
+                                
+                                # If existing is missing keys, add them
+                                for k, v in template_data.items():
+                                    if k not in existing_data:
+                                        existing_data[k] = v
+                                        merged = True
+                                        
+                                # Force critical defaults?
+                                if "clangd.arguments" in template_data:
+                                    # Ensure critical flags exist
+                                    current_set = set(exist_args)
+                                    for arg in tmpl_args:
+                                        if arg not in current_set:
+                                            exist_args.append(arg)
+                                            merged = True
+                                    existing_data["clangd.arguments"] = exist_args
+                                    
+                            # 2. c_cpp_properties.json: merge configurations
+                            elif item == "c_cpp_properties.json":
+                                # Append 'Mission Config' if not present
+                                tmpl_configs = template_data.get("configurations", [])
+                                exist_configs = existing_data.get("configurations", [])
+                                
+                                exist_names = {c.get("name") for c in exist_configs}
+                                for cfg in tmpl_configs:
+                                    if cfg.get("name") not in exist_names:
+                                        exist_configs.insert(0, cfg) # Prepend to make default?
+                                        merged = True
+                                existing_data["configurations"] = exist_configs
+                                
+                            else:
+                                # Generic shallow merge: add missing keys
+                                for k, v in template_data.items():
+                                    if k not in existing_data:
+                                        existing_data[k] = v
+                                        merged = True
+                                        
+                            if merged:
+                                with open(d, 'w') as f_dst:
+                                    json.dump(existing_data, f_dst, indent=4)
+                                print(f"  Merged configuration into {item}")
+                            else:
+                                print(f"  Skipped {item} (already up to date)")
+                                
+                        except Exception as e:
+                            print(f"  Warning: Failed to merge {item}: {e}")
+                    else:
+                        print(f"  Skipped {item} (already exists)")
     else:
         print("  Warning: VSCode templates not found.")
 
@@ -331,6 +414,16 @@ def update_local_compile_db(context, dependencies=None):
         json.dump(db, f, indent=2)
         
     print(f"Updated compile_commands.json for {os.path.basename(local_file)}")
+    
+    # 5. Check System Headers Status (Verification)
+    if not config.get("system_includes"):
+        # We only warn occasionally or always? 
+        # Always is annoying but effective.
+        # Maybe checking if new_args actually has -isystem helps reducing noise?
+        # But auto_ghost doesn't detect system headers usually.
+        print("⚠️  Warning: System headers not synced (missing in config).")
+        print("   IntelliSense may be incomplete (e.g. <stdio.h>).")
+        print("   Run 'projector repair-headers' to fix.")
 
 
 
@@ -438,8 +531,9 @@ def do_pull(args):
                 # Check for ambiguity
                 if len(candidates) > 1:
                      # Interactive Mode: If TTY, ask user
-                     if sys.stdin.isatty():
+                     if sys.stdin.isatty() or os.environ.get("PROJECTOR_INTERACTIVE") == "1":
                          print(f"\n⚠️  Ambiguous compilation context found for {os.path.basename(input_path)}.")
+                         print(f"   (Found {len(candidates)} candidates)")
                          print("   Multiple build targets define this file. Please select the correct context:")
                          
                          choices = []
@@ -1121,6 +1215,7 @@ def do_retract(args):
     config = load_config() # ensure we are in a hologram
     project_root = find_project_root()
     hologram_abs = os.path.join(project_root, HOLOGRAM_DIR)
+    cwd = os.getcwd()
     
     files_to_retract = []
     
@@ -1141,6 +1236,31 @@ def do_retract(args):
             
         input_path = args.file
         abs_path = os.path.abspath(input_path)
+        
+        # Smart Resolution: If path is not in hologram, try to find it inside.
+        if not abs_path.startswith(hologram_abs):
+            # Try joining with hologram
+            # If input_path is relative, it's relative to CWD.
+            # We want to treat it as relative to PROJECT ROOT? Or just append to hologram?
+            # 1. Try relative to CWD mapped to Hologram
+            # e.g. CWD=/chaos, input=asic/zsdk/foo.c -> /chaos/hologram/asic/zsdk/foo.c
+            
+            # rel to project root
+            try:
+                rel_to_root = os.path.relpath(abs_path, project_root)
+                candidate = os.path.join(hologram_abs, rel_to_root)
+                if os.path.exists(candidate):
+                    abs_path = candidate
+                else:
+                    # check if we are in outside_wall? 
+                    pass
+                    # e.g. input=src/main.c -> hologram/src/main.c
+                    # This is covered above if CWD=project_root.
+                    # What if user is in a subdir?
+                    pass
+            except ValueError:
+                pass
+        
         files_to_retract.append(abs_path)
         
     # Process
