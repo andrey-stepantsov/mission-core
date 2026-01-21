@@ -105,6 +105,17 @@ else
      # Re-run for debug output if needed, or just let user check logs
      # bash "$TEST_DIR/test_projector_live.sh"
      EXIT_CODE=1
+     EXIT_CODE=1
+fi
+
+# --- 8. Feature: Projector Clangd (Focus) ---
+echo -n "[Feature] Testing Projector Clangd (Focus)... "
+if devbox run "python3 $TEST_DIR/test_feature_clangd.py" > /dev/null 2>&1; then
+     echo -e "${GREEN}PASSED${NC}"
+else
+     echo -e "${RED}FAILED${NC}"
+     devbox run "python3 $TEST_DIR/test_feature_clangd.py"
+     EXIT_CODE=1
 fi
 
 echo "======================================"

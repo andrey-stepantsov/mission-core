@@ -42,6 +42,7 @@ docker exec -u neo mission-client bash -c "rm -rf /mission/hologram_test_suite"
 docker exec -u neo mission-client bash -c "mkdir -p /mission/hologram_test_suite"
 
 # Init
+docker exec -u neo mission-client bash -c "mkdir -p /mission/hologram_test_suite/.mission"
 docker exec -u neo mission-client bash -c "cd /mission/hologram_test_suite && /mission/tools/bin/projector init oracle@mission-host > /dev/null"
 
 # 4. Start Live Mode

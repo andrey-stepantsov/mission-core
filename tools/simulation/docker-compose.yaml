@@ -14,6 +14,7 @@ services:
     volumes:
       - ./setup_host.sh:/entrypoint-init/setup.sh
       - ../../:/mission:ro # Mount tools read-only for setup usage
+      - ../../:/repos/srl0/srlinux/.mission:rw # Mock the remote mission root
     # We install SSH and build tools to simulate a legacy dev server
     build:
       context: .

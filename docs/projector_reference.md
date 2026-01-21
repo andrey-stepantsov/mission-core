@@ -46,6 +46,20 @@ projector grep "pattern" [optional/path]
 *   **Context**: Maps the remote path (e.g., `/repos/project/...`) to the local `hologram/...` path.
 *   **Clean History**: All remote commands, including grep, run with `unset HISTFILE` to prevent polluting the remote shell history.
 
+### 5. Focus (Clangd Context)
+Generate a dynamic `.clangd` configuration for the workspace based on a specific source file's compilation flags.
+```bash
+projector focus <source_file>
+```
+*   **Purpose**: Clangd cannot infer context for header files (`.h`) in isolation. By "focusing" on a source file (`.c`) that includes the header, you apply its flags (macros, includes) to the entire workspace.
+*   **Result**: Generates a `.clangd` file in the hologram root.
+*   **Best Practice**: Run this when switching between files with different build configurations (e.g. different chips).
+
+### 6. Pull (Edit) Refinement
+When multiple compilation contexts exist for a file:
+*   **Interactive Selection**: `projector` prompts you to choose the correct build target.
+*   **Smart Flag Display**: The prompt automatically hides common flags (intersection) and shows only the **differentiating flags** for each candidate, correcting visual clutter.
+
 ### AI Introspection
 To help AI agents understand the active compilation flags for a file (macros, includes, language standard), use the context command:
 ```bash

@@ -113,6 +113,21 @@
             }
         },
         {
+            "label": "Projector Focus (Clangd)",
+            "type": "shell",
+            "command": "${workspaceFolder}/.mission/tools/bin/projector",
+            "args": [
+                "focus",
+                "${file}"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "panel": "shared"
+            }
+        },
+        {
             "label": "Projector Context (AI)",
             "type": "shell",
             "command": "${workspaceFolder}/.mission/tools/bin/projector",
