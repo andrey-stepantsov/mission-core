@@ -43,8 +43,16 @@ Configure the connection to your remote "Oracle" (Host).
 ./.mission/tools/bin/projector init user@mission-host --remote-root /repos/my-project
 ```
 *   This creates `.hologram_config` and initializes the local `hologram/` directory.
+*   **VSCode Support**: It automatically deploys a `.vscode/` folder adjusted for the mission pack (configured for Clangd and Python analysis).
 
-### Step 5: Verify
+### Step 5: VSCode Setup (Recommended)
+While `projector init` handles the configuration, install the recommended extensions for the best experience.
+1.  Open the workspace in VSCode.
+2.  When prompted, install the **Recommended Extensions** (including `clangd` and `python`).
+3.  **Clangd**: The configuration is pre-tuned for the hologram. It uses the local `compile_commands.json` to resolve dependencies even if they are in the read-only `outside_wall`.
+
+
+### Step 6: Verify
 Pull a file to test the connection.
 ```bash
 ./.mission/tools/bin/projector pull README.md

@@ -107,6 +107,46 @@ def do_init(args):
 
     run_command(["ssh"] + ssh_opts + [host_target, tower_cmd], capture_stderr=False)
 
+    # 5. Deploy VSCode Configuration
+    deploy_vscode_config(remote_root)
+
+def deploy_vscode_config(remote_root):
+    """Deploys VSCode configuration templates if they exist."""
+    print("Deploying VSCode configuration...")
+    
+    # Try to find templates in local .mission first (if sideloaded)
+    # The projector script is in .mission/tools/bin/projector
+    # So templates should be in .mission/templates/vscode
+    
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    # script_dir = .../.mission/tools/bin
+    mission_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+    # mission_root = .../.mission (if running from source) or just use relative if trustworthy
+    
+    # More robust finding strategy:
+    # 1. Check relative to script location
+    template_src = os.path.join(script_dir, "../../templates/vscode")
+    
+    if not os.path.exists(template_src):
+        # 2. Check CWD/.mission (setup scenario)
+        template_src = os.path.join(os.getcwd(), ".mission", "templates", "vscode")
+        
+    if os.path.exists(template_src):
+        target_vscode = os.path.join(os.getcwd(), ".vscode")
+        os.makedirs(target_vscode, exist_ok=True)
+        
+        for item in os.listdir(template_src):
+            s = os.path.join(template_src, item)
+            d = os.path.join(target_vscode, item)
+            if os.path.isfile(s):
+                if not os.path.exists(d):
+                    shutil.copy2(s, d)
+                    print(f"  Created {item}")
+                else:
+                    print(f"  Skipped {item} (already exists)")
+    else:
+        print("  Warning: VSCode templates not found.")
+
 
 
 def update_local_compile_db(context, dependencies=None):

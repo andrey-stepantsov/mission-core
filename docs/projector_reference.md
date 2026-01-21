@@ -76,6 +76,14 @@ For the best experience, use **clangd**.
 ```
 ## Cookbook: Common Scenarios
 
+### 0. VSCode Integration (Tasks)
+If you are using VSCode with the deployed configuration, you can use **Tasks** instead of the CLI for common operations. Press `Cmd+Shift+P` -> `Run Task` to see:
+*   **Projector Pull**: Prompts for a remote path and pulls it.
+*   **Projector Push (Sync)**: Syncs the currently open file.
+*   **Projector Retract**: Retracts the currently open file.
+*   **Projector Log**: Shows the remote build log.
+
+
 ### 1. Creating a New Module
 You can create new files and directories directly in the local `hologram/` folder. The agent will handle the remote creation.
 
