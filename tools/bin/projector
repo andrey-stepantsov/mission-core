@@ -1344,7 +1344,7 @@ def do_retract(args):
             # If input_path is relative, it's relative to CWD.
             # We want to treat it as relative to PROJECT ROOT? Or just append to hologram?
             # 1. Try relative to CWD mapped to Hologram
-            # e.g. CWD=/chaos, input=asic/zsdk/foo.c -> /chaos/hologram/asic/zsdk/foo.c
+            # e.g. CWD=/chaos, input=asic/libs/foo.c -> /chaos/hologram/asic/libs/foo.c
             
             # rel to project root
             try:
