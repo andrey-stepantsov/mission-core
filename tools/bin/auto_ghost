@@ -104,6 +104,7 @@ def main():
     
     parser.add_argument("--mode", choices=["auto", "compiler", "scanner"], default="auto", help="Dependency scanning strategy")
     parser.add_argument("--full", action="store_true", help="Return full context including compile commands")
+    parser.add_argument("--flags", help="Flags to filter compilation context")
     
     args = parser.parse_args()
     
@@ -125,6 +126,9 @@ def main():
             try:
                 # Step 0: Get Context
                 cmd = [str(c_context_bin), str(target_file)]
+                if args.flags:
+                     cmd.extend(["--flags", args.flags])
+                
                 result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
                 context_data = json.loads(result.stdout)
                 include_paths = context_data.get("includes", [])
@@ -134,7 +138,9 @@ def main():
                     compile_context = {
                         "directory": context_data.get("directory"),
                         "arguments": context_data.get("arguments"),
-                        "file": str(target_file)
+                        "file": str(target_file),
+                        "candidates": context_data.get("candidates", []),
+                        "stats": context_data.get("stats", {})
                     }
                 
                 scan_success = False

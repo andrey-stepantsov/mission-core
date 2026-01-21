@@ -14,6 +14,12 @@ projector pull <remote_absolute_path>
 *   **Overlay**: Hides the file from `outside_wall` (if present) to ensure the Hologram version takes precedence.
 *   **Auto-Ghost**: Automatically detects and pulls implicit dependencies (headers, etc.) to `outside_wall/`.
 *   **LSP Configuration**: Automatically updates `compile_commands.json` with correct include paths (`-I` and `-isystem`) pointing to the local `outside_wall`, enabling full `clangd` support.
+*   **Context Selection**: If multiple build contexts exist for the file (e.g. different macros), use `--flags` to specify which one to use.
+    ```bash
+    projector pull src/main.c --flags "-DDEBUG -O0"
+    ```
+    If ambiguous and no flags are provided, `projector` will warn and list options.
+
 
 ### 2. Build & Verify (Atomic)
 Sync the file, trigger the remote build, and **wait** for the result.

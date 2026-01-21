@@ -104,11 +104,12 @@ def get_compile_command(fpath, db_paths, required_flags=None):
         elif len(winners) > 1:
              stats["warnings"].append(
                  f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
+             stats["warnings"].append(
+                 f"⚠️  TOO LOOSE: Found {total_candidates} entries. {len(winners)} matched your selectors equally well (Score: {max_score}). Random winner selected."
              )
             
         best_match = winners[0]
         stats["selected"] = len(winners)
-        
     else:
         best_match = candidates[0]
         stats["selected"] = total_candidates
@@ -117,6 +118,9 @@ def get_compile_command(fpath, db_paths, required_flags=None):
                  f"ℹ️  AMBIGUOUS: Found {total_candidates} entries and no selectors defined. Picking the first one."
              )
 
+    # Always expose candidates for downstream analysis
+    stats["candidates"] = candidates
+    
     return best_match, stats
 
 def extract_includes(entry, repo_root):
@@ -156,9 +160,30 @@ def main():
     repo_root = os.getcwd()
     config = load_config(repo_root)
     
-    if "--db" in sys.argv:
-        db_paths = [sys.argv[sys.argv.index("--db") + 1]]
-    else:
+    target_file = sys.argv[1]
+    repo_root = os.getcwd()
+    config = load_config(repo_root)
+    
+    # Simple CLI parsing (avoid argparse for minimal deps if desired, but we used shlex/json already)
+    db_paths = []
+    provided_flags = []
+    
+    i = 2
+    while i < len(sys.argv):
+        arg = sys.argv[i]
+        if arg == "--db" and i + 1 < len(sys.argv):
+            db_paths.append(sys.argv[i+1])
+            i += 2
+        elif arg == "--flags" and i + 1 < len(sys.argv):
+            # Flags passed as single string e.g. "-DTEST -O2"
+            raw_flags = sys.argv[i+1]
+            # Split by space
+            provided_flags = shlex.split(raw_flags)
+            i += 2
+        else:
+             i += 1
+
+    if not db_paths:
         # Search upwards for compile_commands.json
         current_dir = Path(os.getcwd())
         root_markers = [".git", ".mission", "compile_commands.json"]
@@ -187,8 +212,12 @@ def main():
             db_paths.extend(config["compilation_dbs"])
 
     required_flags = []
-    if "context_selector" in config:
-        required_flags = config["context_selector"].get("required_flags", [])
+    # Merge Config Flags with CLI Flags
+    # CLI flags take precedence or add to them? 
+    # Usually CLI specific flags are more important for disambiguation.
+    # Let's use Union.
+    config_flags = config.get("context_selector", {}).get("required_flags", [])
+    required_flags = list(set(config_flags + provided_flags))
 
     match, stats = get_compile_command(target_file, db_paths, required_flags)
     
@@ -216,6 +245,7 @@ def main():
             "macros": macros,
             "arguments": args, # Full arguments for re-execution
             "directory": entry.get("directory", repo_root),
+            "candidates": stats.get("candidates", []), # Expose all candidates
             "stats": stats 
         }, indent=2))
     else:

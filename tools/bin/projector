@@ -7,6 +7,7 @@ import json
 import shutil
 import time
 import threading
+import shlex
 
 HOLOGRAM_DIR = "hologram"
 OUTSIDE_WALL_DIR = "outside_wall"
@@ -367,6 +368,11 @@ def do_pull(args):
         f"cd $(dirname {remote_path}) && $ghost_bin --full {remote_path}"
     )
     
+    if args.flags:
+        # Safe quoting for the remote shell
+        safe_flags = shlex.quote(args.flags)
+        cmd_ghost += f" --flags {safe_flags}"
+    
     compile_context = None
     dependencies = []
     
@@ -380,6 +386,30 @@ def do_pull(args):
         elif isinstance(data, dict):
             dependencies = data.get("dependencies", [])
             compile_context = data.get("compile_context")
+            
+            # Context Selection Logic
+            if compile_context and "candidates" in compile_context:
+                candidates = compile_context["candidates"]
+                
+                # If we have multiple candidates and no flags were used (or even if they were, but still vague)
+                # Check for ambiguity
+                if len(candidates) > 1:
+                    # Identify distinguishing flags
+                    print(f"⚠️  Ambiguous compilation context found for {os.path.basename(input_path)}.")
+                    print(f"   Defaulting to Candidate #1. Use --flags to refine selection.")
+                    print("")
+                    
+                    print("   Options:")
+                    for idx, cand in enumerate(candidates):
+                         cmd = cand.get("cmd_str", "???")
+                         # Simple extraction of -D and -I for display
+                         # Just display the whole command or truncated?
+                         # Displaying key flags is better.
+                         # Let's extract -D
+                         import re
+                         macros = re.findall(r'-D([a-zA-Z0-9_=\(\)]+)', cmd)
+                         print(f"   {idx+1}. {cmd[:60]}... (Macros: {', '.join(macros)})")
+                    print("")
             
     except Exception as e:
         print(f"Warning: Auto-Ghost failed or returned invalid data: {e}")
@@ -1190,6 +1220,7 @@ def main():
     # Pull
     p_pull = subparsers.add_parser("pull", help="Pull file from host")
     p_pull.add_argument("file", help="Remote absolute file path")
+    p_pull.add_argument("--flags", help="Flags to filter compilation context (e.g. \"-DTEST\")")
     p_pull.set_defaults(func=do_pull)
     
     # Push
