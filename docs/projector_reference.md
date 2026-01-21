@@ -13,6 +13,7 @@ projector pull <remote_absolute_path>
 ```
 *   **Overlay**: Hides the file from `outside_wall` (if present) to ensure the Hologram version takes precedence.
 *   **Auto-Ghost**: Automatically detects and pulls implicit dependencies (headers, etc.) to `outside_wall/`.
+*   **LSP Configuration**: Automatically updates `compile_commands.json` with correct include paths (`-I` and `-isystem`) pointing to the local `outside_wall`, enabling full `clangd` support.
 
 ### 2. Build & Verify (Atomic)
 Sync the file, trigger the remote build, and **wait** for the result.
@@ -57,7 +58,22 @@ Initialized via:
 ```bash
 projector init user@host --remote-root /path/to/repo
 ```
+```bash
+projector init user@host --remote-root /path/to/repo
+```
 
+## IDE Setup (VSCode)
+For the best experience, use **clangd**.
+1. Install Extension: `llvm-vs-code-extensions.vscode-clangd`.
+2. Disable Microsoft C/C++ IntelliSense (to avoid conflicts).
+3. Configure `clangd` arguments in `.vscode/settings.json`:
+```json
+"clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/hologram",
+    "--background-index",
+    "--header-insertion=never"
+]
+```
 ## Cookbook: Common Scenarios
 
 ### 1. Creating a New Module

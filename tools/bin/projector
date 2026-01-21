@@ -109,7 +109,7 @@ def do_init(args):
 
 
 
-def update_local_compile_db(context):
+def update_local_compile_db(context, dependencies=None):
     """Updates the unified local compile_commands.json with rewritten paths."""
     if not context:
         return
@@ -197,6 +197,33 @@ def update_local_compile_db(context):
                 
         new_args.append(arg)
         i += 1
+        
+    # 3b. Inject Dependency Includes
+    if dependencies:
+        include_dirs = set()
+        system_dirs = set()
+        
+        for dep in dependencies:
+            if not dep.startswith("/"):
+                continue
+                
+            # Map to outside_wall
+            rel_dep = dep.lstrip("/")
+            local_dep = os.path.join(outside_wall_abs, rel_dep)
+            local_dep_dir = os.path.dirname(local_dep)
+            
+            # Heuristic: /usr, /opt, /lib are likely system
+            if dep.startswith("/usr") or dep.startswith("/opt") or dep.startswith("/lib"):
+                system_dirs.add(local_dep_dir)
+            else:
+                include_dirs.add(local_dep_dir)
+                
+        # Append new flags
+        for d in sorted(list(include_dirs)):
+            new_args.append(f"-I{d}")
+            
+        for d in sorted(list(system_dirs)):
+            new_args.append(f"-isystem{d}")
         
     entry = {
         "directory": local_dir,
@@ -320,7 +347,7 @@ def do_pull(args):
     print(f"Auto-Ghost found {len(dependencies)} implicit dependencies.")
     
     # Update local compile database if context was provided
-    update_local_compile_db(compile_context)
+    update_local_compile_db(compile_context, dependencies)
 
     # Step 3b: Sync Dependencies to Outside Wall
     for dep_path in dependencies:

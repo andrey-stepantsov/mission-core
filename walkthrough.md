@@ -20,6 +20,9 @@ We have consolidated the "Remote Brain" infrastructure into the standard provisi
 ### C. Compile DB & Auto-Ghost
 -   **Full Context**: `auto_ghost --full` returns dependency list + compilation flags/directory.
 -   **Local Hologram**: `projector` maintains a single unified `compile_commands.json` locally, rewriting remote paths (`-I/remote/...` -> `-I/local/outside_wall/...`) for seamless LSP support.
+-   **LSP Support**:
+    -   Automatically injects implicit dependencies from `auto_ghost` as `-isystem` (for system headers) and `-I` (for project headers) into `compile_commands.json`.
+    -   Enables full IDE features (Go to Definition, Hover, Diagnostics) in VSCode using `clangd` without needing remote extensions.
 
 ## 2. Verification
 Verified in `mission-sim` (with manual prerequisite installation to mimic real host):
