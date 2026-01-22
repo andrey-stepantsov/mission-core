@@ -2,7 +2,7 @@
 set -e
 
 # verify_script.sh
-# Automated regression test for Projector (Realistic Host)
+# Automated regression test for Projector (Realistic Host) v2.9.1
 
 PROJECTOR=/mission/tools/bin/projector
 HOST="oracle@mission-host"
