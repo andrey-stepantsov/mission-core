@@ -125,5 +125,45 @@ class TestProjectorLSP(unittest.TestCase):
         # Verify original flags are NOT present (rewritten)
         self.assertNotIn("-I/usr/include", args)
 
+    def test_header_precedence(self):
+        # Verify that project includes come before system includes in the final list
+        context = {
+            "directory": "/remote/root",
+            "file": "/remote/root/main.c",
+            "arguments": ["gcc", "-c", "main.c", "-I/remote/project/include"]
+        }
+        dependencies = ["/usr/include/stdio.h"]
+        
+        from projector.internal.compile_db import rewrite_compile_flags
+        
+        # We need to spy on rewrite_compile_flags or just check result
+        update_local_compile_db(context, dependencies)
+        
+        db_path = os.path.join(self.hologram_dir, "compile_commands.json")
+        with open(db_path, 'r') as f:
+            db = json.load(f)
+            
+        args = db[0]["arguments"]
+        
+        # Find index of project include (rewritten)
+        project_inc = os.path.join(self.outside_wall_dir, "remote/project/include")
+        
+        # Find index of system include (injected)
+        system_inc = os.path.join(self.outside_wall_dir, "usr/include")
+        
+        idx_project = -1
+        idx_system = -1
+        
+        for i, arg in enumerate(args):
+            if arg == f"-I{project_inc}":
+                idx_project = i
+            if arg == "-isystem" and i+1 < len(args) and args[i+1] == system_inc:
+                idx_system = i
+                
+        self.assertNotEqual(idx_project, -1, "Project include not found")
+        self.assertNotEqual(idx_system, -1, "System include not found")
+        
+        self.assertLess(idx_project, idx_system, "Project include should come BEFORE system include")
+
 if __name__ == '__main__':
     unittest.main()

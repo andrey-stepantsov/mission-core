@@ -4,6 +4,59 @@ import json
 # Correct imports from package structure
 from ..core.config import load_config, HOLOGRAM_DIR, OUTSIDE_WALL_DIR
 
+def rewrite_compile_flags(args, outside_wall_abs):
+    """
+    Rewrites compiler flags to point to outside_wall.
+    Handles: -I /path, -I/path, -isystem /path
+    """
+    new_args = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        
+        # Handle -I /path
+        if arg.startswith("-I") or arg.startswith("-L") or arg == "-isystem":
+            # Check if it's a flag + value or separated
+            flag = arg
+            value = None
+            consumed_next = False
+            
+            if arg == "-isystem":
+                 if i + 1 < len(args):
+                    value = args[i+1]
+                    consumed_next = True
+            elif len(arg) > 2:
+                # -I/path
+                flag = arg[:2]
+                value = arg[2:]
+            else:
+                # -I /path
+                 if i + 1 < len(args):
+                    value = args[i+1]
+                    consumed_next = True
+            
+            if value and value.startswith("/"):
+                # Rewrite to outside_wall
+                # /opt/foo -> .../outside_wall/opt/foo
+                mapped_path = os.path.join(outside_wall_abs, value.lstrip("/"))
+                
+                # Always rewrite to outside_wall
+                # This ensures we don't accidentally use local system headers instead of remote ones.
+                value = mapped_path
+                
+                if consumed_next:
+                    new_args.append(flag)
+                    new_args.append(value)
+                    i += 2
+                else:
+                    new_args.append(f"{flag}{value}")
+                    i += 1
+                continue
+                
+        new_args.append(arg)
+        i += 1
+    return new_args
+
 def update_local_compile_db(context, dependencies=None):
     """Updates the unified local compile_commands.json with rewritten paths."""
     if not context:
@@ -53,57 +106,7 @@ def update_local_compile_db(context, dependencies=None):
             args = shlex.split(cmd_str)
             
     args = args or []
-    new_args = []
-    
-    i = 0
-    while i < len(args):
-        arg = args[i]
-        
-        # Handle -I /path
-        if arg.startswith("-I") or arg.startswith("-L") or arg == "-isystem":
-            # Check if it's a flag + value or separated
-            flag = arg
-            value = None
-            consumed_next = False
-            
-            if arg == "-isystem":
-                 if i + 1 < len(args):
-                    value = args[i+1]
-                    consumed_next = True
-            elif len(arg) > 2:
-                # -I/path
-                flag = arg[:2]
-                value = arg[2:]
-            else:
-                # -I /path
-                 if i + 1 < len(args):
-                    value = args[i+1]
-                    consumed_next = True
-            
-            if value and value.startswith("/"):
-                # Rewrite to outside_wall
-                # /opt/foo -> .../outside_wall/opt/foo
-                mapped_path = os.path.join(outside_wall_abs, value.lstrip("/"))
-                
-                # Check if we should enforce mapping or keep original?
-                # Ideal: if exists locally, map it.
-                if os.path.exists(mapped_path):
-                     value = mapped_path
-                else:
-                     pass
-                
-                if consumed_next:
-                    new_args.append(flag)
-                    new_args.append(mapped_path)
-                    i += 2
-                else:
-                    new_args.append(f"{flag}{mapped_path}")
-                    i += 1
-                continue
-                
-        new_args.append(arg)
-        i += 1
-        
+    new_args = rewrite_compile_flags(args, outside_wall_abs)
     # 3b. Inject Dependency Includes
     if dependencies:
         include_dirs = set()
