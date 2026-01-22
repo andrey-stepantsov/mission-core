@@ -48,10 +48,16 @@ ensure_repo() {
     local url="$2"
     local path="$3"
     
-    # Check for .git directory or file (submodule)
-    if [ -d "$path" ] && [ -e "$path/.git" ]; then
+    # 1. Submodule (FILE .git)
+    if [ -f "$path/.git" ]; then
+        echo "✅ $name (Submodule) is present."
+        
+    # 2. Standard Repo (DIR .git)
+    elif [ -d "$path/.git" ]; then
         echo "🔄 Updating $name..."
         (cd "$path" && git pull --quiet)
+        
+    # 3. Directory exists but empty (clone)
     elif [ -d "$path" ] && [ -z "$(ls -A "$path")" ]; then
         echo "📦 Cloning $name..."
         git clone --quiet "$url" "$path"
