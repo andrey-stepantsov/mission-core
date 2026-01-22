@@ -1,3 +1,4 @@
+
 import unittest
 from unittest.mock import MagicMock, patch, call
 import sys
@@ -6,23 +7,13 @@ import json
 import logging
 import io
 
-# Setup path to import projector
-TOOLS_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools/bin'))
-sys.path.append(TOOLS_BIN)
+# Setup path to import projector package
+TOOLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools'))
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-# Dynamically load projector module
-import importlib.machinery
-import importlib.util
-
-PROJECTOR_PATH = os.path.join(TOOLS_BIN, "projector")
-if not os.path.exists(PROJECTOR_PATH):
-     # Fallback
-     PROJECTOR_PATH = os.path.abspath(os.path.join(os.getcwd(), ".mission/tools/bin/projector"))
-
-loader = importlib.machinery.SourceFileLoader("projector", PROJECTOR_PATH)
-spec = importlib.util.spec_from_loader("projector", loader)
-projector = importlib.util.module_from_spec(spec)
-loader.exec_module(projector)
+from projector.commands.sync import do_pull
+from projector.commands.build import do_context
 
 class TestProjectorContext(unittest.TestCase):
     def setUp(self):
@@ -41,20 +32,26 @@ class TestProjectorContext(unittest.TestCase):
             "host_target": "dummy_host",
             "remote_root": "/remote/root"
         }
-        self.config_patcher = patch.object(projector, 'load_config', return_value=self.mock_config)
-        self.config_patcher.start()
         
-        # Mock run_command
-        self.run_command_patcher = patch.object(projector, 'run_command')
+        # Patch load_config in commands.sync AND commands.build
+        self.config_sync_patcher = patch('projector.commands.sync.load_config', return_value=self.mock_config)
+        self.config_build_patcher = patch('projector.commands.build.load_config', return_value=self.mock_config)
+        self.config_sync_patcher.start()
+        self.config_build_patcher.start()
+        
+        # Mock run_command in commands.sync (do_pull uses it)
+        self.run_command_patcher = patch('projector.commands.sync.run_command')
         self.mock_run_command = self.run_command_patcher.start()
         
-        # Mock update_local_compile_db
-        self.update_db_patcher = patch.object(projector, 'update_local_compile_db')
+        # Mock update_local_compile_db in commands.sync
+        # do_pull imports it from ..internal.compile_db
+        self.update_db_patcher = patch('projector.commands.sync.update_local_compile_db')
         self.mock_update_db = self.update_db_patcher.start()
 
     def tearDown(self):
         self.stdout_patcher.stop()
-        self.config_patcher.stop()
+        self.config_sync_patcher.stop()
+        self.config_build_patcher.stop()
         self.run_command_patcher.stop()
         self.update_db_patcher.stop()
         import shutil
@@ -108,8 +105,9 @@ class TestProjectorContext(unittest.TestCase):
             
         self.mock_run_command.side_effect = side_effect
         
-        # Run do_pull
-        projector.do_pull(args)
+        # Run do_pull (Force non-interactive)
+        with patch('sys.stdin.isatty', return_value=False):
+            do_pull(args)
         
         # Check Output for Warning
         output = self.held_stdout.getvalue()
@@ -121,7 +119,7 @@ class TestProjectorContext(unittest.TestCase):
         # Verify update_local_compile_db was called with the first candidate
         self.mock_update_db.assert_called()
         context_arg = self.mock_update_db.call_args[0][0]
-        self.assertEqual(context_arg["directory"], "/build/a")
+        self.assertEqual(context_arg["entry"]["directory"], "/build/a")
 
     def test_pull_with_flags_propagates_to_remote(self):
         """
@@ -165,7 +163,7 @@ class TestProjectorContext(unittest.TestCase):
             
         self.mock_run_command.side_effect = side_effect
         
-        projector.do_pull(args)
+        do_pull(args)
         
         # Verify no warning since it filtered successfully (mocked response has 1 candidate)
         output = self.held_stdout.getvalue()
@@ -184,6 +182,10 @@ class TestProjectorContext(unittest.TestCase):
         os.makedirs(os.path.join(hologram_dir, "src"), exist_ok=True)
         db_path = os.path.join(hologram_dir, "compile_commands.json")
         
+        # Create Dummy Source File (so it can be read)
+        with open(args.file, 'w') as f:
+            f.write("int main() { return 0; }")
+        
         # Write Mock DB
         mock_db = [
             {
@@ -196,20 +198,27 @@ class TestProjectorContext(unittest.TestCase):
             json.dump(mock_db, f)
 
         # Mock find_project_root to return test_dir
-        with patch.object(projector, 'find_project_root', return_value=self.test_dir):
+        # do_context imports find_project_root from ..core.config
+        with patch('projector.commands.build.find_project_root', return_value=self.test_dir):
             # Run do_context
             try:
-                projector.do_context(args)
+                do_context(args)
             except SystemExit:
                  pass # It shouldn't exit on success, but just in case
         
-        # Verify Output
+        # Verify Output (Markdown format)
         output = self.held_stdout.getvalue()
-        self.assertIn("File: hologram/src/main.c", output)
-        self.assertIn("Standard: c99", output)
-        self.assertIn("- DEBUG", output)
-        self.assertIn("- /outside/include", output)
-        self.assertIn("- /usr/include", output)
+        
+        # Check for key markdown elements
+        self.assertIn("**Target File**", output)
+        self.assertIn("hologram/src/main.c", output)
+        self.assertIn("**Standard**: `c99`", output)
+        self.assertIn("- `DEBUG`", output)
+        self.assertIn("- `/outside/include`", output)
+        self.assertIn("- `/usr/include`", output)
+        
+        # Verify source code is printed
+        self.assertIn("int main() { return 0; }", output)
 
 if __name__ == '__main__':
     unittest.main()

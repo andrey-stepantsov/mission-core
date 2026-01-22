@@ -6,21 +6,12 @@ import shutil
 from unittest.mock import patch, MagicMock
 import sys
 
-# Setup path to import projector
-TOOLS_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools/bin'))
-sys.path.append(TOOLS_BIN)
+# Setup path to import projector package
+TOOLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools'))
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-import importlib.machinery
-import importlib.util
-
-PROJECTOR_PATH = os.path.join(TOOLS_BIN, "projector")
-if not os.path.exists(PROJECTOR_PATH):
-     PROJECTOR_PATH = os.path.abspath(os.path.join(os.getcwd(), ".mission/tools/bin/projector"))
-
-loader = importlib.machinery.SourceFileLoader("projector", PROJECTOR_PATH)
-spec = importlib.util.spec_from_loader("projector", loader)
-projector = importlib.util.module_from_spec(spec)
-loader.exec_module(projector)
+from projector.commands.init import deploy_vscode_config
 
 class TestProjectorConfigMerge(unittest.TestCase):
     def setUp(self):
@@ -59,7 +50,7 @@ class TestProjectorConfigMerge(unittest.TestCase):
             json.dump(user_settings, f)
             
         # 3. Run Deploy with explicit template_dir
-        projector.deploy_vscode_config("/remote", template_dir=self.template_dir)
+        deploy_vscode_config("/remote", template_dir=self.template_dir)
         
         # 4. Verify Merge
         with open(os.path.join(self.vscode_dir, "settings.json"), "r") as f:
@@ -100,7 +91,7 @@ class TestProjectorConfigMerge(unittest.TestCase):
             json.dump(user_props, f)
             
         # 3. Run Deploy with explicit template_dir
-        projector.deploy_vscode_config("/remote", template_dir=self.template_dir)
+        deploy_vscode_config("/remote", template_dir=self.template_dir)
         
         # 4. Verify Merge
         with open(os.path.join(self.vscode_dir, "c_cpp_properties.json"), "r") as f:

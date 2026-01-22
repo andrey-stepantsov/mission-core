@@ -8,17 +8,14 @@ import sys
 import tempfile
 import shutil
 
-# Add tools/bin to path to import projector
-# usage: python3 tests/test_feature_clangd.py
+# Add tools/ to path to import projector package
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TOOLS_BIN = os.path.join(PROJECT_ROOT, "tools", "bin")
-sys.path.insert(0, TOOLS_BIN)
+TOOLS_ROOT = os.path.join(PROJECT_ROOT, "tools")
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-# Import projector module
-# Since it has no .py extension, we use SourceFileLoader
-from importlib.machinery import SourceFileLoader
-projector = SourceFileLoader("projector", os.path.join(TOOLS_BIN, "projector")).load_module()
-sys.modules["projector"] = projector
+from projector.commands.build import do_focus
+import projector.commands.build # For patching find_project_root if needed
 
 class TestProjectorClangd(unittest.TestCase):
     def setUp(self):
@@ -27,16 +24,24 @@ class TestProjectorClangd(unittest.TestCase):
         os.makedirs(self.hologram_dir)
         
         # Mock finding project root to return test_dir
-        self.patcher_root = patch('projector.find_project_root', return_value=self.test_dir)
+        # do_focus imports find_project_root from ..core.config
+        # We need to patch it in projector.commands.build
+        self.patcher_root = patch('projector.commands.build.find_project_root', return_value=self.test_dir)
         self.mock_find_root = self.patcher_root.start()
         
-        # Mock constants in projector if needed
-        # We can't easily mock module-level constants if they are used at import time or global scope,
-        # but projector.HOLOGRAM_DIR is likely used inside functions.
-        projector.HOLOGRAM_DIR = "hologram"
+        # Mock constants in projector module logic
+        # content uses HOLOGRAM_DIR imported from ..core.config
+        # Patching constants in imported module is tricky if they are from-imported
+        # But core.config.HOLOGRAM_DIR is imported as HOLOGRAM_DIR.
+        # Check build.py: `from ..core.config import load_config, HOLOGRAM_DIR`
+        # So we must patch `projector.commands.build.HOLOGRAM_DIR`
+        
+        self.patcher_hologram = patch('projector.commands.build.HOLOGRAM_DIR', 'hologram')
+        self.patcher_hologram.start()
 
     def tearDown(self):
         self.patcher_root.stop()
+        self.patcher_hologram.stop()
         shutil.rmtree(self.test_dir)
 
     def create_compile_db(self, entries):
@@ -72,7 +77,7 @@ class TestProjectorClangd(unittest.TestCase):
         
         # Capture stdout to avoid clutter
         with patch('sys.stdout', new=io.StringIO()) as fake_out:
-            projector.do_focus(args)
+            do_focus(args)
             
         # Verify .clangd exists
         clangd_path = os.path.join(self.hologram_dir, ".clangd")
@@ -106,7 +111,7 @@ class TestProjectorClangd(unittest.TestCase):
         
         with self.assertRaises(SystemExit) as cm:
              with patch('sys.stdout', new=io.StringIO()) as fake_out:
-                projector.do_focus(args)
+                do_focus(args)
         
         self.assertEqual(cm.exception.code, 1)
 
@@ -119,7 +124,7 @@ class TestProjectorClangd(unittest.TestCase):
         
         with self.assertRaises(SystemExit) as cm:
              with patch('sys.stdout', new=io.StringIO()) as fake_out:
-                projector.do_focus(args)
+                do_focus(args)
                 
         self.assertEqual(cm.exception.code, 1)
 

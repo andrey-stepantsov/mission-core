@@ -1,71 +1,76 @@
 
 import os
 import sys
-import pytest
+import unittest
 import shutil
 import tempfile
-import importlib.util
 from unittest.mock import MagicMock, patch
 
-# Load projector script as a module
-PROJECTOR_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../tools/bin/projector"))
-if not os.path.exists(PROJECTOR_PATH):
-    raise FileNotFoundError(f"Projector not found at {PROJECTOR_PATH}")
+# Load projector package
+TOOLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools'))
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-from importlib.machinery import SourceFileLoader
-projector = SourceFileLoader("projector", PROJECTOR_PATH).load_module()
+import projector.core.config
+import projector.core.transport
+from projector.commands.sync import do_pull, do_retract
 
-class TestProjectorOverlay:
-    @pytest.fixture
-    def workspace(self):
+class TestProjectorOverlay(unittest.TestCase):
+    def setUp(self):
         # Create a temp workspace
-        tmp_dir = tempfile.mkdtemp()
-        hologram_dir = os.path.join(tmp_dir, "hologram")
-        outside_wall_dir = os.path.join(tmp_dir, "outside_wall")
-        os.makedirs(hologram_dir)
-        os.makedirs(outside_wall_dir)
+        self.tmp_dir = tempfile.mkdtemp()
+        self.hologram_dir = os.path.join(self.tmp_dir, "hologram")
+        self.outside_wall_dir = os.path.join(self.tmp_dir, "outside_wall")
+        os.makedirs(self.hologram_dir)
+        os.makedirs(self.outside_wall_dir)
         
-        # Save CWD and switch to tmp_dir because projector assumes CWD is project root
-        old_cwd = os.getcwd()
-        os.chdir(tmp_dir)
+        # Save CWD and switch to tmp_dir
+        self.old_cwd = os.getcwd()
+        os.chdir(self.tmp_dir)
         
-        yield tmp_dir
+        # Patch dependencies
+        # do_pull uses load_config (sync.py) -> load_config (core.config)
+        # do_pull uses run_command (sync.py) -> run_command (core.transport)
+        # do_pull uses find_project_root (sync.py) -> find_project_root (core.config)
         
-        # Restore CWD and cleanup
-        os.chdir(old_cwd)
-        shutil.rmtree(tmp_dir)
+        # Since sync.py imports them:
+        # from ..core.config import load_config...
+        # We can try patching them at source if sync module isn't loaded yet, or patch at sync module.
+        # Patching at source is safer if we import `projector.commands.sync` which binds them.
+        
+        self.config_patcher = patch('projector.commands.sync.load_config')
+        self.run_patcher = patch('projector.commands.sync.run_command')
+        self.call_patcher = patch('subprocess.check_call') # used in do_retract (subprocess calls)
+        
+        self.mock_conf = self.config_patcher.start()
+        self.mock_run = self.run_patcher.start()
+        self.mock_call = self.call_patcher.start()
+        
+    def tearDown(self):
+        self.config_patcher.stop()
+        self.run_patcher.stop()
+        self.call_patcher.stop()
+        os.chdir(self.old_cwd)
+        shutil.rmtree(self.tmp_dir)
 
-    @pytest.fixture
-    def mock_deps(self):
-        with patch('projector.load_config') as mock_conf, \
-             patch('projector.run_command') as mock_run, \
-             patch('projector.find_project_root') as mock_root, \
-             patch('subprocess.check_call') as mock_call:
-            yield mock_conf, mock_run, mock_root, mock_call
-
-    def test_pull_hides_from_outside_wall(self, workspace, mock_deps):
-        mock_conf, mock_run, mock_root, mock_call = mock_deps
-        
-        # Setup Config & Root
-        mock_conf.return_value = {"host_target": "test-host", "remote_root": "/remote"}
-        mock_root.return_value = workspace
+    def test_pull_hides_from_outside_wall(self):
+        # Setup Config
+        self.mock_conf.return_value = {"host_target": "test-host", "remote_root": "/remote"}
         
         # Setup Initial State: File in outside_wall
         rel_path = "src/foo.h"
-        wall_path = os.path.join(workspace, "outside_wall", rel_path)
+        wall_path = os.path.join(self.outside_wall_dir, rel_path)
         os.makedirs(os.path.dirname(wall_path), exist_ok=True)
         with open(wall_path, "w") as f:
             f.write("base content")
             
-        assert os.path.exists(wall_path)
+        self.assertTrue(os.path.exists(wall_path))
         
         # Setup Mock: pull simulates rsync by creating the hologram file
         def side_effect_run(cmd, *args, **kwargs):
-            # If rsyncing to hologram, create the file
+             # The real command: rsync -az -e ... host:path local_dest
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
             
-            # The real command: rsync -az -e ... host:path local_dest
-            # We check if local_dest is in hologram dir
             if "rsync" in cmd_str:
                 dest = cmd[-1]
                 if "hologram" in dest:
@@ -74,72 +79,72 @@ class TestProjectorOverlay:
                         f.write("pulled content")
             return ""
             
-        mock_run.side_effect = side_effect_run
+        self.mock_run.side_effect = side_effect_run
 
         # execute PULL
         args = MagicMock()
         args.file = rel_path
         args.flags = None
-        projector.do_pull(args)
+        
+        # We need to ensure HOLOGRAM_DIR / OUTSIDE_WALL_DIR are correct in sync module
+        # They are imported constants. We can patch them or just rely on them being relative to CWD.
+        # Since setUp sets CWD to temp dir, and constants are strings "hologram", "outside_wall"
+        # it should just work.
+        
+        # BUT do_pull uses `load_config` which we patched.
+        
+        do_pull(args)
         
         # VERIFY:
-        hologram_path = os.path.join(workspace, "hologram", rel_path)
+        hologram_path = os.path.join(self.hologram_dir, rel_path)
         
         # 1. File should be in hologram
-        assert os.path.exists(hologram_path)
+        self.assertTrue(os.path.exists(hologram_path))
         # 2. File should be GONE from outside_wall
-        assert not os.path.exists(wall_path), "File should be hidden (removed) from outside_wall after pull"
+        self.assertFalse(os.path.exists(wall_path), "File should be hidden (removed) from outside_wall after pull")
 
-    def test_retract_restores_to_outside_wall(self, workspace, mock_deps):
-        mock_conf, mock_run, mock_root, mock_call = mock_deps
-        
-        # Setup Config & Root
-        mock_conf.return_value = {"host_target": "test-host", "remote_root": "/remote"}
-        mock_root.return_value = workspace
+    def test_retract_restores_to_outside_wall(self):
+        # Setup Config
+        self.mock_conf.return_value = {"host_target": "test-host", "remote_root": "/remote"}
         
         # Setup Initial State: File in hologram, NOT in outside_wall
         rel_path = "src/foo.h"
-        hologram_path = os.path.join(workspace, "hologram", rel_path)
-        wall_path = os.path.join(workspace, "outside_wall", rel_path)
+        hologram_path = os.path.join(self.hologram_dir, rel_path)
+        wall_path = os.path.join(self.outside_wall_dir, rel_path)
         
         os.makedirs(os.path.dirname(hologram_path), exist_ok=True)
         with open(hologram_path, "w") as f:
             f.write("overlay content")
             
-        assert os.path.exists(hologram_path)
-        assert not os.path.exists(wall_path)
+        self.assertTrue(os.path.exists(hologram_path))
+        self.assertFalse(os.path.exists(wall_path))
         
         # Mocking
-        # do_retract calls subprocess.check_call to verify remote file.
-        # It calls run_command to rsync back.
-        
         def side_effect_run(cmd, *args, **kwargs):
-            # If rsyncing to outside_wall, create the file
             cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
             if "rsync" in cmd_str and "outside_wall" in cmd_str:
                 dest = cmd[-1] # Simplistic arg parsing
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with open(dest, "w") as f:
                     f.write("restored base content")
-                return True # truthy return needed
+                return True 
             return ""
         
-        mock_run.side_effect = side_effect_run
-
-        # Execute RETRACT
-        args = MagicMock()
-        # Argument passed to retract is LOCAL path
-        args.file = hologram_path # projector logic uses absolute or relative path
+        self.mock_run.side_effect = side_effect_run
         
-        projector.do_retract(args)
+        # We need to patch find_project_root in sync module to return tmp_dir
+        with patch('projector.commands.sync.find_project_root', return_value=self.tmp_dir):
+            # Execute RETRACT
+            args = MagicMock()
+            args.file = hologram_path
+            
+            do_retract(args)
         
         # VERIFY:
         # 1. File should be GONE from hologram
-        assert not os.path.exists(hologram_path), "File should be removed from hologram"
+        self.assertFalse(os.path.exists(hologram_path), "File should be removed from hologram")
         # 2. File should be RESTORED to outside_wall
-        assert os.path.exists(wall_path), "File should be restored to outside_wall"
-        
-        # 3. Permissions (Read Only)
-        # We can't easily assert chmod 444 in temp, but we can verify chmod was called if we mocked os.chmod
-        # But for now, existence is the key logic check.
+        self.assertTrue(os.path.exists(wall_path), "File should be restored to outside_wall")
 
+if __name__ == '__main__':
+    unittest.main()

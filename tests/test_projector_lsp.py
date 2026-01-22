@@ -6,30 +6,13 @@ import tempfile
 import shutil
 from unittest.mock import MagicMock, patch
 
-# Add tools/bin to path to import projector
-TOOLS_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools/bin'))
-sys.path.append(TOOLS_BIN)
+# Add tools/ to path
+TOOLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools'))
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-# Import projector as a module
-# Since it doesn't have .py extension, we use importlib machinery or just rename/symlink
-# Simplified: use run_path or exec?
-# But we need to test functions.
-# Let's try to load it.
-import importlib.machinery
-import importlib.util
-
-PROJECTOR_PATH = os.path.join(TOOLS_BIN, "projector")
-if not os.path.exists(PROJECTOR_PATH):
-    # Fallback for when running from root
-    PROJECTOR_PATH = os.path.abspath(os.path.join(os.getcwd(), ".mission/tools/bin/projector"))
-
-if not os.path.exists(PROJECTOR_PATH):
-    raise FileNotFoundError(f"Cannot find projector at {PROJECTOR_PATH}")
-
-loader = importlib.machinery.SourceFileLoader("projector", PROJECTOR_PATH)
-spec = importlib.util.spec_from_loader("projector", loader)
-projector = importlib.util.module_from_spec(spec)
-loader.exec_module(projector)
+import projector.core.config
+from projector.internal.compile_db import update_local_compile_db
 
 class TestProjectorLSP(unittest.TestCase):
     def setUp(self):
@@ -39,25 +22,31 @@ class TestProjectorLSP(unittest.TestCase):
         os.makedirs(self.hologram_dir)
         os.makedirs(self.outside_wall_dir)
         
-        # Mock constants in projector module
-        projector.HOLOGRAM_DIR = "hologram"
-        projector.OUTSIDE_WALL_DIR = "outside_wall"
+        # Mock constants in core.config module
+        # We need to patch them for the duration of the test
+        self.hologram_patcher = patch('projector.internal.compile_db.HOLOGRAM_DIR', 'hologram')
+        self.wall_patcher = patch('projector.internal.compile_db.OUTSIDE_WALL_DIR', 'outside_wall')
+        # Also need to patch usage of os.getcwd in compile_db to return test_dir
+        self.cwd_patcher = patch('os.getcwd', return_value=self.test_dir)
+        
+        self.hologram_patcher.start()
+        self.wall_patcher.start()
+        self.mock_getcwd = self.cwd_patcher.start()
         
         # Mock load_config
         self.mock_config = {
             "host_target": "dummy",
             "remote_root": "/remote/root"
         }
-        self.original_load_config = projector.load_config
-        projector.load_config = MagicMock(return_value=self.mock_config)
-        
-        # Mock os.getcwd to return test_dir
-        self.cwd_patcher = patch('os.getcwd', return_value=self.test_dir)
-        self.mock_getcwd = self.cwd_patcher.start()
+        # compile_db imports load_config from core.config, so we patch it there
+        self.config_patcher = patch('projector.internal.compile_db.load_config', return_value=self.mock_config)
+        self.config_patcher.start()
         
     def tearDown(self):
-        projector.load_config = self.original_load_config
+        self.hologram_patcher.stop()
+        self.wall_patcher.stop()
         self.cwd_patcher.stop()
+        self.config_patcher.stop()
         shutil.rmtree(self.test_dir)
 
     def test_update_local_compile_db_injects_includes(self):
@@ -68,14 +57,14 @@ class TestProjectorLSP(unittest.TestCase):
             "arguments": ["gcc", "-c", "main.c"]
         }
         dependencies = [
-            "/remote/root/include/my_header.h", # Project header
-            "/usr/include/stdio.h",             # System header
-            "/usr/local/include/lib.h",         # System header
-            "/opt/lib/other.h"                  # System header
+            "/remote/root/include/my_header.h", 
+            "/usr/include/stdio.h",             
+            "/usr/local/include/lib.h",         
+            "/opt/lib/other.h"                  
         ]
         
         # Run
-        projector.update_local_compile_db(context, dependencies)
+        update_local_compile_db(context, dependencies)
         
         # Verify
         db_path = os.path.join(self.hologram_dir, "compile_commands.json")
@@ -88,22 +77,15 @@ class TestProjectorLSP(unittest.TestCase):
         args = entry["arguments"]
         
         # Verify normal includes (-I)
-        # /remote/root/include -> outside_wall/remote/root/include
         expected_project_inc = os.path.join(self.outside_wall_dir, "remote/root/include")
         self.assertIn(f"-I{expected_project_inc}", args)
         
         # Verify system includes (-isystem)
-        # /usr/include -> outside_wall/usr/include
         expected_usr_inc = os.path.join(self.outside_wall_dir, "usr/include")
-        # Note: Implementation logic adds -isystem and path as SEPARATE arguments
         self.assertIn("-isystem", args)
         
-        # /opt/lib -> outside_wall/opt/lib
         expected_opt_inc = os.path.join(self.outside_wall_dir, "opt/lib")
-        # Check that -isystem and path are adjacent or combined?
-        # Implementation appends them as separate arguments: ['-isystem', 'path']
-        # search for index of -isystem and check next arg
-        self.assertIn("-isystem", args)
+        # Check that -isystem and path are adjacent
         indices = [i for i, x in enumerate(args) if x == "-isystem"]
         found_usr = False
         found_opt = False
@@ -123,7 +105,7 @@ class TestProjectorLSP(unittest.TestCase):
             "arguments": ["gcc", "-I/usr/include", "-I/remote/root/include", "main.c"]
         }
         
-        projector.update_local_compile_db(context, [])
+        update_local_compile_db(context, [])
         
         # Verify
         db_path = os.path.join(self.hologram_dir, "compile_commands.json")
@@ -142,7 +124,6 @@ class TestProjectorLSP(unittest.TestCase):
         
         # Verify original flags are NOT present (rewritten)
         self.assertNotIn("-I/usr/include", args)
-
 
 if __name__ == '__main__':
     unittest.main()
