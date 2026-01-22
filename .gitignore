@@ -46,3 +46,4 @@ hologram/
 outside_wall/
 regression_log.txt
 tools/bin/.hologram_config
+tools/aider-vertex/

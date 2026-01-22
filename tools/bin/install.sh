@@ -1,0 +1,122 @@
+#!/bin/bash
+set -e
+
+# Mission Pack Bootstrap Script
+# Usage:
+#   Remote Mode: curl ... | bash -s -- remote <user@host> <remote_root> [--mission-root <path>]
+#   Local Mode:  curl ... | bash -s -- local
+
+MODE="$1"
+shift
+
+if [ -z "$MODE" ]; then
+    echo "Usage: install.sh <mode> [args]"
+    echo "Modes:"
+    echo "  remote <user@host> <remote_root> [--mission-root <path>]"
+    echo "  local"
+    exit 1
+fi
+
+# Check Prerequisites
+if ! command -v tmux &> /dev/null; then
+    echo "❌ Error: 'tmux' is required for Mission Control (Radio/Tower)."
+    echo "   Please install tmux (e.g., 'brew install tmux' or 'apt-get install tmux') and try again."
+    exit 1
+fi
+
+MISSION_REPO="https://github.com/andrey-stepantsov/mission-core.git"
+MISSION_DIR=".mission"
+
+# 1. Acquire Mission Pack
+if [ ! -d "$MISSION_DIR" ]; then
+    echo "🔮 Summoning Mission Pack..."
+    git submodule add -b main "$MISSION_REPO" "$MISSION_DIR" || git clone "$MISSION_REPO" "$MISSION_DIR"
+    (cd "$MISSION_DIR" && git submodule update --init --recursive)
+else
+    echo "🔮 Mission Pack already present."
+fi
+
+
+# 1.1. Deploy Components
+DEPLOY_TOOLS_DIR="$MISSION_DIR/tools"
+
+ensure_repo() {
+    local name="$1"
+    local url="$2"
+    local path="$3"
+    
+    if [ -d "$path" ] && [ -d "$path/.git" ]; then
+        echo "🔄 Updating $name..."
+        (cd "$path" && git pull --quiet)
+    elif [ -d "$path" ] && [ -z "$(ls -A "$path")" ]; then
+        echo "📦 Cloning $name..."
+        git clone --quiet "$url" "$path"
+    elif [ ! -d "$path" ]; then
+        echo "📦 Cloning $name..."
+        git clone --quiet "$url" "$path"
+    else
+        echo "⚠️  $path exists but is not empty/git repo. Skipping."
+    fi
+}
+
+ensure_repo "DDD" "https://github.com/andrey-stepantsov/ddd" "$DEPLOY_TOOLS_DIR/ddd"
+ensure_repo "Aider-Vertex" "https://github.com/andrey-stepantsov/aider-vertex" "$DEPLOY_TOOLS_DIR/aider-vertex"
+
+# 1.2. Bootstrap Config
+if [ ! -f ".ddd/config.yaml" ] && [ ! -f "ddd.config" ]; then
+    echo "⚙️  Generating initial .ddd/config.yaml..."
+    mkdir -p .ddd
+    cat > .ddd/config.yaml <<EOF
+version: "1.0"
+mode: "dummy"
+commands:
+  build: "echo 'Dummy Build Success'"
+  verify: "echo 'Dummy Verify Success'"
+EOF
+fi
+
+# Ensure tools are executable
+chmod +x "$MISSION_DIR/tools/bin/"*
+
+# 2. Mode Execution
+if [ "$MODE" == "remote" ]; then
+    HOST_TARGET="$1"
+    REMOTE_ROOT="$2"
+    shift 2
+    
+    if [ -z "$HOST_TARGET" ] || [ -z "$REMOTE_ROOT" ]; then
+        echo "Error: Remote mode requires user@host and remote_root"
+        exit 1
+    fi
+    
+    echo "🚀 Initializing Remote Brain..."
+    "$MISSION_DIR/tools/bin/projector" init "$HOST_TARGET" --remote-root "$REMOTE_ROOT" "$@"
+
+elif [ "$MODE" == "local" ]; then
+    echo "🧠 Initializing Local Brain (Direct Mode)..."
+    
+    # Check for compile database
+    if [ ! -f "compile_commands.json" ]; then
+        echo "⚠️ Warning: compile_commands.json not found in $(pwd)."
+        echo "   Projector Context requires a compilation database to function fully."
+    fi
+    
+    # Setup Tools
+    mkdir -p .mission-context
+    
+    # Add to .gitignore
+    if [ -f .gitignore ]; then
+        grep -q ".mission" .gitignore || echo ".mission" >> .gitignore
+        grep -q ".mission-context" .gitignore || echo ".mission-context" >> .gitignore
+    else
+        echo ".mission" > .gitignore
+        echo ".mission-context" >> .gitignore
+    fi
+    
+    echo "✅ Local Environment Configured."
+    echo "   Run: ./.mission/tools/bin/projector context <file> \"Task\""
+
+else
+    echo "Error: Unknown mode '$MODE'"
+    exit 1
+fi
