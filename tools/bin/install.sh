@@ -72,7 +72,6 @@ ensure_repo() {
 }
 
 ensure_repo "DDD" "https://github.com/andrey-stepantsov/ddd" "$DEPLOY_TOOLS_DIR/ddd"
-ensure_repo "Aider-Vertex" "https://github.com/andrey-stepantsov/aider-vertex" "$DEPLOY_TOOLS_DIR/aider-vertex"
 
 # 1.2. Bootstrap Config
 if [ ! -f ".ddd/config.yaml" ] && [ ! -f "ddd.config" ]; then
