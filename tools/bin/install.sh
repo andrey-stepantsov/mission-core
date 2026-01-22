@@ -32,7 +32,8 @@ MISSION_BRANCH="${MISSION_BRANCH:-main}"
 # 1. Acquire Mission Pack
 if [ ! -d "$MISSION_DIR" ]; then
     echo "🔮 Summoning Mission Pack ($MISSION_BRANCH)..."
-    git submodule add -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR" || git clone -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR"
+    # Try submodule first (suppress error if not in git repo), then clone
+    (git submodule add -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR" 2>/dev/null) || git clone -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR"
     (cd "$MISSION_DIR" && git submodule update --init --recursive)
 else
     echo "🔮 Mission Pack already present."
@@ -47,7 +48,8 @@ ensure_repo() {
     local url="$2"
     local path="$3"
     
-    if [ -d "$path" ] && [ -d "$path/.git" ]; then
+    # Check for .git directory or file (submodule)
+    if [ -d "$path" ] && [ -e "$path/.git" ]; then
         echo "🔄 Updating $name..."
         (cd "$path" && git pull --quiet)
     elif [ -d "$path" ] && [ -z "$(ls -A "$path")" ]; then
@@ -77,8 +79,8 @@ commands:
 EOF
 fi
 
-# Ensure tools are executable
-chmod +x "$MISSION_DIR/tools/bin/"*
+# Ensure tools are executable (ignore broken symlinks/errors)
+chmod +x "$MISSION_DIR/tools/bin/"* 2>/dev/null || true
 
 # 2. Mode Execution
 if [ "$MODE" == "remote" ]; then
