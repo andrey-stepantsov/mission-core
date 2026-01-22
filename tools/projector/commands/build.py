@@ -293,6 +293,11 @@ def do_context(args):
     
     if config:
         print(f"🔮 Projector: Hologram Mode active.", file=sys.stderr)
+        
+        if not args.file:
+             print("Usage: projector context <file> [task]")
+             sys.exit(1)
+
         project_root = find_project_root() 
         if not project_root: project_root = os.getcwd() 
         

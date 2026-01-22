@@ -10,6 +10,44 @@ from ..core.config import load_config, HOLOGRAM_DIR, OUTSIDE_WALL_DIR, find_proj
 from ..core.transport import run_command
 from ..internal.compile_db import update_local_compile_db
 
+def compute_candidate_diff(candidates):
+    """
+    Computes the difference between candidate flags.
+    Returns a list of diff strings describing each candidate.
+    """
+    import shlex
+    
+    # 1. Parse all candidates to sets of flags
+    cand_flags = []
+    
+    for cand in candidates:
+        cmd = cand.get("cmd_str") or cand.get("command") or ""
+        try:
+            flags = set(shlex.split(cmd))
+        except:
+             # Fallback if quoting is broken
+            flags = set(cmd.split()) 
+        cand_flags.append(flags)
+        
+    # 2. Find Intersection
+    if cand_flags:
+        common_flags = set.intersection(*cand_flags)
+    else:
+        common_flags = set()
+        
+    # 3. Compute Diff
+    diffs = []
+    for idx, cand in enumerate(candidates):
+        flags = cand_flags[idx]
+        diff = flags - common_flags
+        diff_str = " ".join(sorted(list(diff)))
+        if not diff_str:
+            diff_str = "(Identical to others)"
+        
+        diffs.append(diff_str)
+        
+    return diffs
+
 def do_pull(args):
     """Pulls a file from the host."""
     config = load_config()
@@ -78,6 +116,10 @@ def do_pull(args):
     else:
         # Fallback to dynamic discovery
         auto_ghost_bin = "$(git rev-parse --show-toplevel 2>/dev/null || echo '.')/.mission/tools/bin/auto_ghost"
+
+    # Fix tilde expansion for quoted usage
+    if auto_ghost_bin.startswith("~/"):
+        auto_ghost_bin = f"$HOME{auto_ghost_bin[1:]}"
         
     # Improved discovery: Try project tool
     import shlex
@@ -130,35 +172,10 @@ def do_pull(args):
                         print(f"   Defaulting to Candidate #1. Use --flags to refine selection.")
                         
                         print(f"   Options:")
-                        # 1. Parse all candidates to sets of flags
-                        cand_flags = []
-                        import shlex
-                        
-                        for cand in candidates:
-                            cmd = cand.get("cmd_str") or cand.get("command") or ""
-                            try:
-                                flags = set(shlex.split(cmd))
-                            except:
-                                flags = set(cmd.split()) 
-                            cand_flags.append(flags)
-                            
-                        # 2. Find Intersection
-                        if cand_flags:
-                            common_flags = set.intersection(*cand_flags)
-                        else:
-                            common_flags = set()
-                            
-                        # 3. Display Diff
-                        for idx, cand in enumerate(candidates):
-                            flags = cand_flags[idx]
-                            diff = flags - common_flags
-                            diff_str = " ".join(sorted(list(diff)))
-                            if not diff_str:
-                                diff_str = "(Identical to others)"
-                            
+                        diffs = compute_candidate_diff(candidates)
+                        for idx, diff_str in enumerate(diffs):
                             if len(diff_str) > 120:
                                 diff_str = diff_str[:117] + "..."
-                                
                             print(f"   {idx+1}. {diff_str}")
                         print("")
                         compile_context = candidates[0]

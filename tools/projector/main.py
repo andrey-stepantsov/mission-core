@@ -3,6 +3,7 @@ import sys
 from .commands.init import do_init
 from .commands.sync import do_pull, do_push, do_retract
 from .commands.build import do_build, do_log, do_listen, do_live, do_context, do_focus
+from .commands.run import do_run
 from .commands.misc import do_grep, do_repair_headers
 
 def main():
@@ -70,9 +71,14 @@ def main():
     
     # Context (AI)
     p_context = subparsers.add_parser("context", help="Show AI-friendly compilation context")
-    p_context.add_argument("file", help="Local file path")
+    p_context.add_argument("file", nargs="?", help="Local file path")
     p_context.add_argument("task", nargs="?", help="Optional task description for the AI agent")
     p_context.set_defaults(func=do_context)
+
+    # Run
+    p_run = subparsers.add_parser("run", help="Run command on remote host in project context")
+    p_run.add_argument("command", nargs="+", help="Command to run")
+    p_run.set_defaults(func=do_run)
 
     # Repair Headers
     p_repair = subparsers.add_parser("repair-headers", help="Sync missing system headers")

@@ -46,6 +46,15 @@ projector grep "pattern" [optional/path]
 *   **Context**: Maps the remote path (e.g., `/repos/project/...`) to the local `hologram/...` path.
 *   **Clean History**: All remote commands, including grep, run with `unset HISTFILE` to prevent polluting the remote shell history.
 
+### 5. Run (Execute)
+Execute any command on the remote host within the project environment (useful for scripts, tests, etc).
+```bash
+projector run "make test"
+```
+*   **Environment**: Automatically loads the project context (cd to root).
+*   **Interactive**: Supports interactive tools via pseudo-terminal allocation (-t).
+
+
 ### 5. Focus (Clangd Context)
 Generate a dynamic `.clangd` configuration for the workspace based on a specific source file's compilation flags.
 ```bash
@@ -105,10 +114,11 @@ Stored in `.hologram_config` at the project root.
 Initialized via:
 ```bash
 projector init user@host --remote-root /path/to/repo
+# OR (Shorthand)
+projector init user@host:/path/to/repo
 ```
-```bash
-projector init user@host --remote-root /path/to/repo
-```
+*   **Recommendation**: Always specify the remote root path to avoid defaulting to the home directory.
+
 
 ## IDE Setup (VSCode)
 For the best experience, use **clangd**.

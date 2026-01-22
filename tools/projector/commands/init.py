@@ -23,6 +23,10 @@ def do_init(args):
         
     remote_root = remote_root.rstrip("/") if remote_root else "."
     
+    if remote_root == ".":
+        print("⚠️  Warning: No remote root path specified. Defaulting to home/cwd.")
+        print("   Recommended: projector init user@host:/path/to/project")
+    
     print(f"Initializing Hologram for host: {host_target} (Root: {remote_root})")
     
     os.makedirs(HOLOGRAM_DIR, exist_ok=True)
@@ -61,6 +65,18 @@ def do_init(args):
          mission_root = f"{remote_root}/.mission"
 
     remote = RemoteHost(host_target, transport=args.transport)
+
+    # Check for shared ~/.mission if not explicitly set (SSH only)
+    if not remote_mission_root and remote.transport == 'ssh':
+        print("🔍 Checking for shared Mission Pack (~/.mission)...")
+        try:
+             remote.run("test -d ~/.mission")
+             print("   Found shared ~/.mission. Using it.")
+             config['remote_mission_root'] = "~/.mission"
+             save_config(config)
+             mission_root = "~/.mission"
+        except:
+             pass
     
     # 0. Remote Bootstrap (If SSH)
     if remote.transport == 'ssh':

@@ -1,4 +1,4 @@
-# Mission Core v2.8.0: Unified Brain
+# Mission Core v2.9.0: Projector Run & UX Fixes
 
 **Mission Core** is a containerized agent infrastructure that provides a **Unified Projector Interface** for autonomous coding agents. It abstract local and remote environments into a consistent API for context, search, and synchronization.
 
