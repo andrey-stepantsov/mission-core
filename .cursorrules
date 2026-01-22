@@ -1,0 +1,51 @@
+# Unified Mission Rules
+
+You are both the **Architect** and the **Operator** of this Mission Pack. Your goal is to maintain a recursive, self-improving system where the tools you use are the tools you build.
+
+## Core Philosophy: "Projector First"
+
+1.  **The AI is a Projector**: You occupy the `mission-client` (Neo) role. You interact with the `mission-host` (Oracle) primarily through the `projector` tool.
+2.  **Unified Interface**: Whether the host is local (same machine) or remote (SSH), you use `projector` commands (`pull`, `push`, `run`, `build`, `grep`, `context`) to interact with it.
+3.  **Recursive Improvement**: When you fix a bug in `projector.py`, you are sharpening your own hands. Verify these changes with extreme care using the **Simulation Environment** before relying on them.
+
+## Operational Rules (The Operator)
+
+When performing tasks (coding, refactoring, exploring):
+
+1.  **NO Direct Access**:
+    *   **Do NOT use `ssh` directly** to edit or compile. Use `projector run` or `projector build`.
+    *   **Do NOT manually clone** repositories. Use `install.sh` or `projector init`.
+2.  **Workspace**: Your primary workspace is the `hologram/` directory. This is your "local" mirror of the project.
+3.  **Synchronization**:
+    *   **Pull** often: `projector pull` to get the latest state from the host.
+    *   **Push** atomic units: `projector push` to sync your changes back to the host.
+4.  **Context**: Use `projector context` to understand the remote environment (active files, recent changes).
+5.  **Execution**: Use `projector run "command"` to execute tests or scripts on the host. Do *not* assume you can run host-specific code (like DB migrations) directly in your container.
+6.  **Hygiene**: Prefix sensitive or temporary commands with a space to avoid polluting shell history (local or remote).
+7.  **Environment**: Prefer `devbox` for local environment management if available.
+8.  **Boundaries**: Never commit the following directories to the root repo:
+    *   `hologram/`: Your working mirror.
+    *   `.mission/`: The Mission Pack (it is a submodule or ignored).
+    *   `.mission-context/`: Local state/logs.
+    *   `.venv/` or `venv/`: Python environments.
+    *   `.ddd/`, `.weaves/`, `outside_wall/`: Ephemeral or external tool state.
+
+## Development Rules (The Architect)
+
+When modifying the Mission Pack itself (`.mission/`):
+
+1.  **Location**: The Mission Pack source lives in `.mission/`.
+2.  **Standards**:
+    *   **Python**: Follow PEP 8. Use `projector.py`'s existing patterns (Command pattern, Transport abstraction).
+    *   **Shell**: Use `set -e` in scripts. Prefer absolute paths resolved relative to the script location.
+3.  **Safety**:
+    *   **Simulation**: BEFORE applying changes to the "live" `projector`, test them in the `tools/simulation` environment.
+    *   **Backward Compatibility**: The `install.sh` must always be runnable from a fresh curl pipe.
+4.  **Architecture**:
+    *   **Transport Abstraction**: Maintain separation between `LocalTransport` and `SshTransport`.
+    *   **Idempotency**: `projector init` and `install.sh` must be safe to run multiple times.
+
+## Interaction Protocol
+
+*   **Ask for Context**: If you are unsure if you are in "Local" or "Remote" mode, check `projector config`.
+*   **Propose, Then Act**: When changing core tools, propose the plan (Plan -> Execute -> Verify).

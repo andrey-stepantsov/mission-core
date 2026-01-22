@@ -29,7 +29,7 @@ ssh $HOST "sudo chown -R $USER:$USER /repos /auto /opt"
 # 2. Deploy Mission Tools
 echo "   Deploying Toolchain via Git..."
 # Install git and python deps if missing
-ssh $HOST "which git >/dev/null || (sudo apt-get update && sudo apt-get install -y git python3-venv curl)"
+ssh $HOST "sudo apt-get update && sudo apt-get install -y git python3-venv python3-yaml curl"
 
 # Clone Mission Core
 echo "   Cloning Mission Core..."

@@ -135,6 +135,62 @@ def update_gitignore():
         print("Git ignore verification: OK.")
 
 
+def enforce_cursorrules():
+    """Ensures the root .cursorrules is a symlink to the Mission Pack's rules."""
+    # Logic:
+    # 1. Find .mission/.cursorrules
+    mission_rules = os.path.join(".mission", ".cursorrules")
+    if not os.path.exists(mission_rules):
+        # Fallback: try to find it relative to script if .mission is not in CWD
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        mission_dir = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+        candidate = os.path.join(mission_dir, ".cursorrules")
+        if os.path.exists(candidate):
+            # We need to symlink RELATIVE to CWD (Project Root)
+            # If candidate is absolute, and CWD is project root...
+            # But we want the link to point to `.mission/.cursorrules` usually.
+            pass
+            
+    # Assuming standard layout: CWD contains .mission
+    target_link = ".cursorrules"
+    
+    if os.path.exists(mission_rules):
+        print(f"Verifying {target_link} -> {mission_rules}...")
+        
+        # Check if it exists and is correct
+        if os.path.exists(target_link):
+            if os.path.islink(target_link):
+                current_target = os.readlink(target_link)
+                if current_target == mission_rules:
+                    return # All good
+                else:
+                    print(f"Warning: {target_link} points to {current_target}, updating to {mission_rules}")
+                    os.remove(target_link)
+            else:
+                # It's a real file.
+                # Check if it was manually created.
+                # We should back it up if it differs?
+                # For now: Backup and overwrite with link.
+                print(f"Warning: Replacing existing {target_link} with symlink to Mission Pack.")
+                os.rename(target_link, f"{target_link}.bak")
+        
+        try:
+            os.symlink(mission_rules, target_link)
+            print(f"✅ Linked {target_link} -> {mission_rules}")
+        except OSError as e:
+            print(f"Warning: Failed to symlink .cursorrules: {e}")
+            # Fallback: Copy
+            try:
+                shutil.copy2(mission_rules, target_link)
+                print(f"   Copied instead.")
+            except:
+                pass
+    else:
+        # If .mission/.cursorrules doesn't exist, we can't enforce it.
+        # But we should probably warn?
+        pass
+
+
 def do_init(args):
     """Initializes the hologram environment."""
     host_target = args.host_target
@@ -171,6 +227,9 @@ def do_init(args):
     
     # 3b. Enforce Git Ignore
     update_gitignore()
+    
+    # 3c. Enforce Mission Rules
+    enforce_cursorrules()
     
     print("Hologram initialized.")
     
