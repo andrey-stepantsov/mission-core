@@ -48,9 +48,6 @@ ensure_repo() {
     local url="$2"
     local path="$3"
     
-    # DEBUG
-    # ls -la "$path"
-    
     # 1. Git Repo (File or Dir)
     if [ -e "$path/.git" ]; then
         echo "✅ $name (Git) is present."
