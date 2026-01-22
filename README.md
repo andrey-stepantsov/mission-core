@@ -1,39 +1,26 @@
-# Mission Core v0.3.0: Hybrid Swarm
+# Mission Core v2.8.0: Unified Brain
 
-**Mission Core** is a containerized agent infrastructure designed for autonomous DevOps tasks. It bridges the gap between a **Host Orchestrator** (macOS/Linux) and **Isolated Agents** (Docker).
+**Mission Core** is a containerized agent infrastructure that provides a **Unified Projector Interface** for autonomous coding agents. It abstract local and remote environments into a consistent API for context, search, and synchronization.
 
 ## 🏗 Architecture
-The system uses a **Radio-based Communication Protocol** to bypass Docker network isolation without exposing ports.
-
-* **Director (Container):** Writes commands to a shared log file (`.mission-context/mission_log.md`).
-* **LocalSmith (Container):** Tails the log file, executes commands, and writes back ACKs.
-* **Radio (Shared Lib):** Handles atomic file I/O and absolute path resolution.
+The system uses `projector` as the central engine:
+- **Remote Brain**: Mirrors a remote host ("Oracle") to a local sparse workspace ("Hologram") via SSH.
+- **Local Brain**: Manages a local repository using the same API via direct filesystem operations.
 
 ## 📦 Deployment
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed setup instructions.
-
-*   **Supported Platforms**: Linux (AMD64), macOS (Intel & Apple Silicon/M1).
-*   **Apple Silicon**: The launcher automatically performs a **Native Bootstrap** to build an ARM64-optimized image, ensuring high performance and stability.
+See [docs/UNIFIED_DEPLOYMENT.md](docs/UNIFIED_DEPLOYMENT.md) for the universal installation guide.
 
 ## 🚀 Quick Start
-# 1. Start the Agent
-./tools/bin/up
+```bash
+# 1. Initialize (Remote or Local)
+./tools/bin/install.sh [remote|local]
 
-# 2. Run the Health Check Suite
-# Requires Devbox (Python 3.8)
-devbox run ./tests/run_suite.sh
+# 2. Start the Agent
+./tools/bin/up
 ```
 
-## 🧪 Development
-We use **Devbox** to ensure a consistent **Python 3.8** environment associated with legacy production constraints.
-
-### Running Tests
-*   **Unit Tests (Fast)**: `devbox run "pytest -m unit"`
-*   **Integration Tests (Slow)**: `devbox run "pytest -m integration"`
-*   **Full Regression**: `./tests/run_suite.sh` (or `devbox run ./tests/run_suite.sh`)
-
 ## 🛠 Active Agents
-| Agent | Type | Role |
-|-------|------|------|
-| **LocalSmith** | Docker | Infrastructure Engineer. Can edit configs, manage files, and run shell verifications. |
-| **Director** | Docker | Mission Control. Sends commands to agents. |
+| Agent | Role |
+|-------|------|
+| **LocalSmith** | Managing files, running builds, executing verifications. |
+| **Projector** | Polymorphic transport layer (SSH/Local) for data access. |

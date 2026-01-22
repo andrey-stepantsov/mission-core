@@ -104,27 +104,13 @@ if [ "$MODE" == "remote" ]; then
     "$MISSION_DIR/tools/bin/projector" init "$HOST_TARGET" --remote-root "$REMOTE_ROOT" "$@"
 
 elif [ "$MODE" == "local" ]; then
-    echo "🧠 Initializing Local Brain (Direct Mode)..."
+    echo "🧠 Initializing Local Brain (Standardizing on Projector)..."
     
-    # Check for compile database
-    if [ ! -f "compile_commands.json" ]; then
-        echo "⚠️ Warning: compile_commands.json not found in $(pwd)."
-        echo "   Projector Context requires a compilation database to function fully."
-    fi
+    # Use projector to initialize local mode
+    # host_target='local' is just a label here
+    "./$MISSION_DIR/tools/bin/projector" init local --transport local --remote-root "$(pwd)"
     
-    # Setup Tools
-    mkdir -p .mission-context
-    
-    # Add to .gitignore
-    if [ -f .gitignore ]; then
-        grep -q ".mission" .gitignore || echo ".mission" >> .gitignore
-        grep -q ".mission-context" .gitignore || echo ".mission-context" >> .gitignore
-    else
-        echo ".mission" > .gitignore
-        echo ".mission-context" >> .gitignore
-    fi
-    
-    echo "✅ Local Environment Configured."
+    echo "✅ Local Environment Configured via Projector."
     echo "   Run: ./.mission/tools/bin/projector context <file> \"Task\""
 
 else

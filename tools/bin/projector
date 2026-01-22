@@ -35,8 +35,49 @@ def run_command(cmd, shell=False, capture_stderr=True):
             
         raise e  # Re-raise so caller handles flow
 
+class RemoteHost:
+    def __init__(self, host, transport='ssh', ssh_opts=None):
+        self.host = host
+        self.transport = transport
+        self.ssh_opts = ssh_opts or ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+
+    def run(self, cmd_str, capture_stderr=True, shell=True):
+        if self.transport == 'ssh':
+            full_cmd = ["ssh"] + self.ssh_opts + [self.host, f"unset HISTFILE; {cmd_str}"]
+            return run_command(full_cmd, shell=False, capture_stderr=capture_stderr)
+        else:
+            # Local Mode: just run the command directly
+            return run_command(f"unset HISTFILE; {cmd_str}", shell=True, capture_stderr=capture_stderr)
+
+    def rsync_pull(self, remote_path, local_path, recursive=False, files_from=None):
+        cmd = ["rsync", "-az"]
+        if recursive: cmd.append("-r")
+        
+        if self.transport == 'ssh':
+            cmd.extend(["-e", f"ssh {' '.join(self.ssh_opts)}"])
+            if files_from:
+                cmd.extend(["--files-from", files_from, f"{self.host}:/", local_path])
+            else:
+                cmd.extend([f"{self.host}:{remote_path}", local_path])
+        else:
+            # Local rsync
+            if files_from:
+                cmd.extend(["--files-from", files_from, "/", local_path])
+            else:
+                cmd.extend([remote_path, local_path])
+        
+        return run_command(cmd)
+
+    def rsync_push(self, local_path, remote_path):
+        cmd = ["rsync", "-az"]
+        if self.transport == 'ssh':
+            cmd.extend(["-e", f"ssh {' '.join(self.ssh_opts)}", local_path, f"{self.host}:{remote_path}"])
+        else:
+            cmd.extend([local_path, remote_path])
+        
+        return run_command(cmd)
+
 def load_config():
-    # print("DEBUG: Entering load_config")
     current = os.path.abspath(os.getcwd())
     steps = 0
     while True:
@@ -46,10 +87,13 @@ def load_config():
         steps += 1
         
         candidate = os.path.join(current, CONFIG_FILE)
-        # print(f"Debug: Checking config at {candidate}", file=sys.stderr)
         if os.path.exists(candidate):
             with open(candidate, 'r') as f:
-                return json.load(f)
+                config_data = json.load(f)
+                return config_data, RemoteHost(
+                    config_data.get('host_target'), 
+                    transport=config_data.get('transport', 'ssh')
+                )
         
         parent = os.path.dirname(current)
         if parent == current:
@@ -57,7 +101,7 @@ def load_config():
         current = parent
         
     print("Warning: Hologram Config not found. Checking for Direct Mode...")
-    return None
+    return None, None
 
 def save_config(config):
     # Always save to CWD or explicit root?
@@ -142,22 +186,54 @@ def do_init(args):
          mission_root = remote_mission_root
     else:
          mission_root = f"{remote_root}/.mission"
-         
-    tower_script = f"{mission_root}/tools/bin/launch_tower"
-    
-    # Fallback logic if root is '.', try typical locations
-    if remote_root == "." and not remote_mission_root:
-         tower_cmd = (
-            "if [ -f .mission/tools/bin/launch_tower ]; then ./.mission/tools/bin/launch_tower; "
-            "elif [ -f /mission/tools/bin/launch_tower ]; then /mission/tools/bin/launch_tower; "
-            "else echo 'Tower script not found'; fi"
-        )
-    else:
-        tower_cmd = f"if [ -f {tower_script} ]; then {tower_script}; else echo 'Tower script not found at {tower_script}'; fi"
-    
-    ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
 
-    run_command(["ssh"] + ssh_opts + [host_target, f"unset HISTFILE; {tower_cmd}"], capture_stderr=False)
+    remote = RemoteHost(host_target, transport=args.transport)
+    
+    # 0. Remote Bootstrap (If SSH)
+    if remote.transport == 'ssh':
+        print(f"🌍 Verifying Mission Pack on remote {host_target}...")
+        try:
+            # Check if .mission exists
+            remote.run(f"test -d {mission_root}")
+            print("   Mission Pack found on remote.")
+        except:
+            print("   Mission Pack not found. Bootstrapping...")
+            # Clone it
+            # Using -c http.sslVerify=false to support simulation/self-signed certs
+            repo = "https://github.com/andrey-stepantsov/mission-core.git"
+            cmd = f"git clone -c http.sslVerify=false {repo} {mission_root}"
+            try:
+                remote.run(cmd)
+                print("   ✅ Bootstrapped Mission Core on remote.")
+                
+                # Update submodules if needed? 
+                # remote.run(f"cd {mission_root} && git submodule update --init --recursive")
+                
+            except Exception as e:
+                print(f"❌ Failed to bootstrap remote: {e}")
+                print("   Please install manually or check connectivity.")
+                sys.exit(1)
+
+    if remote.transport == 'ssh':
+        print("🚀 Launching The Tower (Remote Watcher)...")
+        tower_script = f"{remote_mission_root}/tools/bin/launch_tower"
+        
+        # Verify script exists first?
+        # We can just try running it.
+        
+        # We launch it in background or just rely on it daemonizing?
+        # launch_tower script usually handles daemonizing (tmux).
+        
+        cmd = f"if [ -f {tower_script} ]; then {tower_script}; else echo 'Tower script not found at {tower_script}'; fi"
+        
+        try:
+            remote.run(cmd)
+            print("   Tower signal sent.")
+        except Exception as e:
+            print(f"⚠️  Failed to launch Tower: {e}")
+            print("   You may need to run run it manually on the host.")
+    else:
+        print("Skipping Tower launch (Local Mode).")
 
     # 5. Deploy VSCode Configuration
     deploy_vscode_config(remote_root)
@@ -1955,6 +2031,7 @@ def main():
     p_init = subparsers.add_parser("init", help="Initialize hologram")
     p_init.add_argument("host_target", help="SSH target (user@host)")
     p_init.add_argument("--remote-root", help="Absolute path to remote repository root", default=".")
+    p_init.add_argument("--transport", help="Transport mode (ssh or local)", default="ssh")
     p_init.add_argument("--remote-mission-root", help="Absolute path to remote .mission directory (if outside repo)", default=None)
     p_init.set_defaults(func=do_init)
     

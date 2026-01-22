@@ -2,8 +2,9 @@
 # setup_realistic_host.sh
 # Provisions mission-sim with a "Realistic" Enterprise Layout (Project0)
 
-HOST="mission-sim"
+HOST="${MISSION_HOST:-mission-host}"
 USER="oracle"
+HOST="$USER@$HOST"
 
 # Layout Constants
 PROJECT_ROOT="/repos/projects/project0"
@@ -21,7 +22,7 @@ echo "   Cleaning old workspaces & creating dirs..."
 # Actually simpler: just make them in user space if possible or use sudo mkdir.
 # The sim user 'oracle' likely has sudo passwordless or we assume we can write to /repos if we chown it.
 # Let's assume we need to setup permissions first.
-ssh $HOST "sudo rm -rf /repos /auto /opt/framework0"
+ssh $HOST "sudo rm -rf $PROJECT_ROOT /auto /opt/framework0"
 ssh $HOST "sudo mkdir -p $PROJECT_ROOT $SDK_DIR $FRAMEWORK_DIR $REMOTE_MISSION"
 ssh $HOST "sudo chown -R $USER:$USER /repos /auto /opt"
 
@@ -48,10 +49,10 @@ ssh $HOST "python3 -m pip install -r $REMOTE_MISSION/tools/ddd/requirements.txt"
 echo "   Planting 'Project0' Chaos Plan..."
 # OVERRIDE: Copy local chaos.py to ensure we have the latest logic (supporting 'both' mode)
 # This handles the case where the cloned repo is behind our local development.
-scp .mission/tools/lib/chaos.py $HOST:$REMOTE_MISSION/tools/lib/chaos.py
+scp tools/lib/chaos.py $HOST:$REMOTE_MISSION/tools/lib/chaos.py
 
 # OVERRIDE: Copy local launch_tower as it might not be in the default git branch yet
-scp .mission/tools/bin/launch_tower $HOST:$REMOTE_MISSION/tools/bin/launch_tower
+scp tools/bin/launch_tower $HOST:$REMOTE_MISSION/tools/bin/launch_tower
 ssh $HOST "chmod +x $REMOTE_MISSION/tools/bin/launch_tower"
 
 ssh $HOST "cat > /tmp/chaos_plan_project0.yaml" <<EOF

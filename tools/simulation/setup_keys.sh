@@ -1,11 +1,13 @@
 #!/bin/bash
 set -e
 echo "Generating key..."
-docker exec -u client mission-client bash -c "[ -f /home/client/.ssh/id_rsa ] || ssh-keygen -t rsa -N '' -f /home/client/.ssh/id_rsa"
-PUBKEY=$(docker exec -u client mission-client cat /home/client/.ssh/id_rsa.pub)
+docker exec -u neo mission-client bash -c "[ -f /home/neo/.ssh/id_rsa ] || ssh-keygen -t rsa -N '' -f /home/neo/.ssh/id_rsa"
+# Configure SSH to ignore host keys for simulation
+docker exec -u neo mission-client bash -c "echo 'Host *' > /home/neo/.ssh/config && echo '    StrictHostKeyChecking no' >> /home/neo/.ssh/config && echo '    UserKnownHostsFile /dev/null' >> /home/neo/.ssh/config && chmod 600 /home/neo/.ssh/config"
+PUBKEY=$(docker exec -u neo mission-client cat /home/neo/.ssh/id_rsa.pub)
 echo "Key: $PUBKEY"
 echo "Pushing to host..."
-docker exec mission-host bash -c "mkdir -p /home/mission/.ssh && echo '$PUBKEY' >> /home/mission/.ssh/authorized_keys && chown mission:mission /home/mission/.ssh/authorized_keys"
+docker exec mission-host bash -c "mkdir -p /home/oracle/.ssh && echo '$PUBKEY' >> /home/oracle/.ssh/authorized_keys && chown oracle:oracle /home/oracle/.ssh/authorized_keys"
 echo "Creating test file..."
-docker exec -u mission mission-host bash -c "echo 'Hello World' > /home/mission/test_file.txt"
+docker exec -u oracle mission-host bash -c "echo 'Hello World' > /home/oracle/test_file.txt"
 echo "Done."

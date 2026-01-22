@@ -1,4 +1,4 @@
 {
-    "host_target": "mission-sim",
+    "host_target": "oracle@mission-host",
     "remote_root": "/repos/projects/project0"
 }
