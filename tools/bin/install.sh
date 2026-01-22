@@ -27,10 +27,12 @@ fi
 MISSION_REPO="https://github.com/andrey-stepantsov/mission-core.git"
 MISSION_DIR=".mission"
 
+MISSION_BRANCH="${MISSION_BRANCH:-main}"
+
 # 1. Acquire Mission Pack
 if [ ! -d "$MISSION_DIR" ]; then
-    echo "🔮 Summoning Mission Pack..."
-    git submodule add -b main "$MISSION_REPO" "$MISSION_DIR" || git clone "$MISSION_REPO" "$MISSION_DIR"
+    echo "🔮 Summoning Mission Pack ($MISSION_BRANCH)..."
+    git submodule add -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR" || git clone -b "$MISSION_BRANCH" "$MISSION_REPO" "$MISSION_DIR"
     (cd "$MISSION_DIR" && git submodule update --init --recursive)
 else
     echo "🔮 Mission Pack already present."
