@@ -124,6 +124,7 @@ def main():
     parser_get = subparsers.add_parser('get', help='Get all files for a specific view.')
     parser_get.add_argument('view_name', help='The name of the view to get.')
     parser_get.add_argument('--expand', action='store_true', help='Expand context using C-Context analysis.')
+    parser_get.add_argument('--json', action='store_true', help='Output in JSON format.')
 
     args = parser.parse_args()
 
@@ -171,7 +172,10 @@ def main():
             # Pass manual macros to the expander
             final_files = expand_c_context(final_files, repo_root, manual_macros=extra_defines)
 
-        print(" ".join(final_files))
+        if args.json:
+            print(json.dumps(final_files))
+        else:
+            print(" ".join(final_files))
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 name: mission-core
-version: 2.1.0
+version: v2.9.2
 description: "The Unified Container Architecture for Embedded AI Agents"
 
 architecture:

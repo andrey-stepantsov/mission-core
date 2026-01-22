@@ -85,10 +85,17 @@ def get_weave_files(view_name, tools_root):
     try:
         # We assume we are in the repo root for weave to find config, or weave handles it.
         # We pass --expand to get contexts as well?
-        cmd = [str(weave_bin), "get", view_name, "--expand"]
+        cmd = [str(weave_bin), "get", view_name, "--expand", "--json"]
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True)
-        # Weave outputs space-separated files relative to repo root usually
-        files = result.stdout.strip().split()
+        # Weave outputs JSON now
+        try:
+            files = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            # Fallback for old weave? Or just error.
+            # Assuming we updated weave, so this should be fine. 
+            print("Error decoding weave JSON", file=sys.stderr)
+            return []
+            
         return [str(Path(f).resolve()) for f in files if f]
     except Exception as e:
         print(f"Error invoking weave: {e}", file=sys.stderr)
@@ -174,9 +181,39 @@ def main():
                             res = subprocess.run(scan_cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
                             
                             # Parse Make Rule Output
-                            output = res.stdout.replace("\\\n", " ")
-                            parts = output.split()
-                            dependencies = parts[1:]
+                            # GCC outputs: "target: dep1 dep2 \n dep3 ..."
+                            # We can't just split() because filenames might have spaces escaped as "\ "
+                            output = res.stdout
+                            
+                            # 1. Normalize line continuations
+                            output = output.replace("\\\n", "")
+                            
+                            # 2. Extract dependencies part (after ":")
+                            if ":" in output:
+                                _, deps_text = output.split(":", 1)
+                            else:
+                                deps_text = output # Fallback
+                                
+                            # 3. Parse with regex to handle escaped spaces
+                            # Pattern: look for non-space sequences, allowing "\ "
+                            # Or simpler: Split by space, but recombine if ended with backslash? 
+                            # GCC escapes space as "\ ", so we can use regex
+                            import re
+                            # Matches sequence of (escaped char OR non-whitespace)
+                            # But wait, we replaced \\\n with empty string (concatenation). 
+                            # Escaped space in filename is likely "\ " in the output.
+                            
+                            # Regex strategy:
+                            # 1. Split by whitespace *that is not preceded by a backslash*
+                            # (?<!\\)\s+
+                            raw_deps = re.split(r'(?<!\\)\s+', deps_text.strip())
+                            
+                            dependencies = []
+                            for d in raw_deps:
+                                if d:
+                                    # invalid escape sequences might happen, but usually just "\ " -> " "
+                                    clean = d.replace("\\ ", " ")
+                                    dependencies.append(clean)
                             
                             for dep in dependencies:
                                 dep_path = Path(cwd) / dep

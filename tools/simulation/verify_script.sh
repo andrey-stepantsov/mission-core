@@ -4,7 +4,10 @@ set -e
 # verify_script.sh
 # Automated regression test for Projector (Realistic Host) v2.9.1
 
-PROJECTOR=/mission/tools/bin/projector
+# Resolve script directory to find projector relative to it
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Assuming script is in tools/simulation, projector is in tools/bin
+PROJECTOR="$DIR/../bin/projector"
 HOST="oracle@mission-host"
 PROJECT_ROOT="/repos/projects/project0"
 HOST_TARGET="$HOST:$PROJECT_ROOT"
