@@ -1,6 +1,7 @@
-# Task: Implement C/C++ LSP Support
+# Task: Create Remote Brain Review
 
-- [x] Modify `projector` to inject dependency includes <!-- id: 0 -->
-- [x] Create unit tests for LSP logic (`tests/test_projector_lsp.py`) <!-- id: 1 -->
-- [x] Verify `compile_commands.json` generation (Verified via unit test) <!-- id: 2 -->
-- [x] Verify `clangd` compatibility (System includes injected as `-isystem`) <!-- id: 3 -->
+- [x] Analyze `design_remote_brain.md` <!-- id: 30 -->
+- [x] Analyze `projector_reference.md` <!-- id: 31 -->
+- [x] Analyze `context_engine.md` <!-- id: 32 -->
+- [x] Analyze Projector Source Code <!-- id: 34 -->
+- [x] Synthesize `remote_brain_review.md` <!-- id: 33 -->
