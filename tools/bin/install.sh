@@ -48,16 +48,21 @@ ensure_repo() {
     local url="$2"
     local path="$3"
     
-    # 1. Submodule (FILE .git)
-    if [ -f "$path/.git" ]; then
-        echo "✅ $name (Submodule) is present."
+    # DEBUG
+    # ls -la "$path"
+    
+    # 1. Git Repo (File or Dir)
+    if [ -e "$path/.git" ]; then
+        echo "✅ $name (Git) is present."
+        if [ -d "$path/.git" ]; then
+             # Only update standard repos, submodules are managed by parent usually, 
+             # but we can try pulling if we want latest. 
+             # For now, just logging content.
+             echo "   Updating..."
+             (cd "$path" && git pull --quiet)
+        fi
         
-    # 2. Standard Repo (DIR .git)
-    elif [ -d "$path/.git" ]; then
-        echo "🔄 Updating $name..."
-        (cd "$path" && git pull --quiet)
-        
-    # 3. Directory exists but empty (clone)
+    # 2. Directory exists but empty (clone)
     elif [ -d "$path" ] && [ -z "$(ls -A "$path")" ]; then
         echo "📦 Cloning $name..."
         git clone --quiet "$url" "$path"
