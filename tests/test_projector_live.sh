@@ -31,9 +31,29 @@ docker exec -u neo mission-client bash -c "mkdir -p ~/.ssh && [ -f ~/.ssh/id_rsa
 PUBKEY=$(docker exec -u neo mission-client cat /home/neo/.ssh/id_rsa.pub)
 # Install on Host
 docker exec mission-host bash -c "mkdir -p /home/oracle/.ssh && echo '$PUBKEY' >> /home/oracle/.ssh/authorized_keys && chmod 600 /home/oracle/.ssh/authorized_keys && chown -R oracle:oracle /home/oracle/.ssh"
+docker exec -u oracle mission-host bash -c "echo 'insecure' > ~/.curlrc"
+docker exec -u oracle mission-host bash -c "mkdir -p ~/.pip && echo '[global]' > ~/.pip/pip.conf && echo 'trusted-host = pypi.org files.pythonhosted.org pypi.python.org' >> ~/.pip/pip.conf"
 
 # Start dd-daemon on Host (as oracle user)
-docker exec -d -u oracle mission-host bash -c "/mission/tools/bin/dd-daemon > /tmp/ddd.log 2>&1"
+# Provision tools to expected location
+docker exec -u oracle mission-host bash -c "mkdir -p ~/.mission && cp -r /mission/tools ~/.mission/tools && rm -rf ~/.mission/tools/ddd/.venv"
+# Patch DDD bootstrap to handle missing ensurepip (Critical for Python 3.8-slim)
+docker exec -u oracle mission-host bash -c "sed -i 's/python3 -m venv \"\$VENV_DIR\" || true/python3 -m venv \"\$VENV_DIR\" || python3 -m venv --without-pip \"\$VENV_DIR\"/' ~/.mission/tools/ddd/bootstrap.sh"
+docker exec -u oracle mission-host bash -c "sed -i 's/\"\$VENV_DIR\/bin\/pip\" install --upgrade pip/# \"\$VENV_DIR\/bin\/pip\" install --upgrade pip/' ~/.mission/tools/ddd/bootstrap.sh"
+# Patch dd-daemon to use PollingObserver for reliability in Docker
+docker exec -u oracle mission-host bash -c "sed -i 's/from watchdog.observers import Observer/from watchdog.observers.polling import PollingObserver as Observer/' ~/.mission/tools/ddd/src/dd-daemon.py"
+docker exec -d -u oracle mission-host bash -c "cd ~ && /home/oracle/.mission/tools/bin/dd-daemon > /tmp/ddd.log 2>&1"
+# Create .ddd/config.json on host so daemon has a target
+docker exec -u oracle mission-host bash -c "mkdir -p ~/.ddd && echo '{\"targets\": {\"dev\": {\"build\": {\"cmd\": \"echo MISSION COMPLETE\"}}}}' > ~/.ddd/config.json"
+# Wait for dd-daemon to be ready (bootstrap can take time)
+echo "   ... Waiting for dd-daemon to bootstrap..."
+for i in {1..60}; do
+    if docker exec mission-host grep -q "dd-daemon ACTIVE" /tmp/ddd.log 2>/dev/null; then
+        echo "   ... dd-daemon is READY."
+        break
+    fi
+    sleep 1
+done
 
 # 3. Initialize Client
 echo "   [3/6] Initializing Projector..."
@@ -68,7 +88,7 @@ echo "   [5/6] Triggering Impulse..."
 docker exec -u neo mission-client bash -c "mkdir -p /mission/hologram_test_suite/hologram"
 docker exec -u neo mission-client bash -c "cd /mission/hologram_test_suite && touch hologram/test_live_suite.txt"
 
-sleep 10 # Wait for debounce + sync + build + radio
+sleep 30 # Wait for debounce + sync + build + radio
 
 
 # 6. Verify Listen Log
@@ -84,8 +104,15 @@ else
     echo "$LOG_CONTENT"
     echo "------------------"
     
-    echo "--- Host Log ---"
-    docker exec mission-host cat /home/oracle/.ddd/run/build.log
+    echo "--- Host Log (.ddd/run/build.log) ---"
+    docker exec mission-host cat /home/oracle/.ddd/run/build.log || true
+    echo "--- Host Log (/tmp/ddd.log) ---"
+    docker exec mission-host cat /tmp/ddd.log || true
+    echo "----------------"
+    
+    echo "--- Host Diagnosis ---"
+    docker exec mission-host ls -la /home/oracle/.mission/tools/bin/launch_tower || true
+    docker exec mission-host ls -la /mission/tools/bin/launch_tower || true
     echo "----------------"
     
     exit 1

@@ -21,7 +21,7 @@ services:
       dockerfile_inline: |
         FROM python:3.8-slim
         # Simulate missing pip environment
-        RUN pip uninstall -y pip setuptools wheel && rm -rf /usr/local/lib/python3.8/ensurepip
+        RUN pip uninstall -y pip setuptools wheel 2>/dev/null || true && rm -rf /usr/local/lib/python3.8/ensurepip
         RUN apt-get update && apt-get install -y openssh-server rsync git build-essential vim tmux sudo curl
         RUN mkdir -p /var/run/sshd
         # User 'oracle' with password 'oracle'
