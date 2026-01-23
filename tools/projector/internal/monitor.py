@@ -4,6 +4,66 @@ import sys
 import json
 import time
 
+
+def parse_log_line(line):
+    """
+    Parses a single log line and returns a signal event if detected.
+    Returns:
+      None - Normal log line
+      "BUILD_START" - Build started
+      "BUILD_SUCCESS" - Build success
+      "BUILD_FAILURE" - Build failure
+    """
+    if not line:
+        return None
+        
+    if line.startswith("[RADIO]"):
+        # Parse Signal
+        payload_str = line[len("[RADIO]"):].strip()
+        try:
+            payload = json.loads(payload_str)
+            event = payload.get("event")
+            msg = payload.get("message")
+            ts = payload.get("timestamp")
+            
+            if event == "BUILD_START":
+                print(f"\n🚀 [MISSION START] {ts}", flush=True)
+                print(f"   >> {msg}", flush=True)
+                return "BUILD_START"
+            elif event == "BUILD_SUCCESS":
+                print(f"✅ [MISSION COMPLETE] {ts}", flush=True)
+                print(f"   >> {msg}\n", flush=True)
+                return "BUILD_SUCCESS"
+            elif event == "BUILD_FAILURE":
+                print(f"❌ [MISSION FAILED] {ts}", flush=True)
+                print(f"   >> {msg}\n", flush=True)
+                return "BUILD_FAILURE"
+            else:
+                print(f"ℹ️  [RADIO] {event}: {msg}", flush=True)
+                return event
+                
+        except json.JSONDecodeError:
+            print(f"⚠️  [RADIO CORRUPT] {line}", flush=True)
+            return None
+    else:
+        # Legacy Signal Detection
+        print(f"   [log] {line}", flush=True)
+        
+        if "[*] Pipeline Complete." in line:
+            print(f"✅ [MISSION COMPLETE] (Legacy Signal)", flush=True)
+            return "BUILD_SUCCESS"
+            
+        if line.startswith("[-] ") and "Failed" in line:
+            print(f"❌ [MISSION FAILED] (Legacy Signal)", flush=True)
+            return "BUILD_FAILURE"
+
+        # Fallback Detection
+        if "Est. Tokens:" in line or "--- 📊 Build Stats ---" in line:
+             print(f"✅ [MISSION COMPLETE] (Stats Detected)", flush=True)
+             return "BUILD_SUCCESS"
+             
+    return None
+
 def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
     """
     Monitors the remote build log.
@@ -64,54 +124,12 @@ def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
                         pass
 
                 line = raw_line.strip()
-                if not line:
-                    continue
-                    
-                if line.startswith("[RADIO]"):
-                    # Parse Signal
-                    payload_str = line[len("[RADIO]"):].strip()
-                    try:
-                        payload = json.loads(payload_str)
-                        event = payload.get("event")
-                        msg = payload.get("message")
-                        ts = payload.get("timestamp")
-                        
-                        if event == "BUILD_START":
-                            print(f"\n🚀 [MISSION START] {ts}", flush=True)
-                            print(f"   >> {msg}", flush=True)
-                        elif event == "BUILD_SUCCESS":
-                            print(f"✅ [MISSION COMPLETE] {ts}", flush=True)
-                            print(f"   >> {msg}\n", flush=True)
-                            if stop_on_finish: return 0
-                        elif event == "BUILD_FAILURE":
-                            print(f"❌ [MISSION FAILED] {ts}", flush=True)
-                            print(f"   >> {msg}\n", flush=True)
-                            if stop_on_finish: return 1
-                        else:
-                            print(f"ℹ️  [RADIO] {event}: {msg}", flush=True)
-                            
-                    except json.JSONDecodeError:
-                        print(f"⚠️  [RADIO CORRUPT] {line}", flush=True)
-                else:
-                    # Legacy Signal Detection
-                    print(f"   [log] {line}", flush=True)
-                    
-                    if "[*] Pipeline Complete." in line:
-                        print(f"✅ [MISSION COMPLETE] (Legacy Signal)", flush=True)
-                        if stop_on_finish: return 0
-                        
-                    if line.startswith("[-] ") and "Failed" in line:
-                        print(f"❌ [MISSION FAILED] (Legacy Signal)", flush=True)
-                        if stop_on_finish: return 1
-
-                    # Fallback Detection: DD-Daemon always writes Build Stats at end
-                    if "Est. Tokens:" in line or "--- 📊 Build Stats ---" in line:
-                         # We saw the stats, so the build is done.
-                         # We assume success (0) because we can't distinguish failure from log content easily
-                         # without parsing. The Agent will parse the output anyway.
-                         if stop_on_finish:
-                             print(f"✅ [MISSION COMPLETE] (Stats Detected)", flush=True)
-                             return 0
+                result = parse_log_line(line)
+                
+                if result == "BUILD_SUCCESS":
+                     if stop_on_finish: return 0
+                elif result == "BUILD_FAILURE":
+                     if stop_on_finish: return 1
             
             # If we get here, the process ended (but wait didn't end).
             # Means SSH dropped.

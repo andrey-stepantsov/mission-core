@@ -30,6 +30,9 @@ ssh $HOST "sudo chown -R $USER:$USER /repos /auto /opt"
 echo "   Deploying Toolchain via Git..."
 # Install git and python deps if missing
 ssh $HOST "sudo apt-get update && sudo apt-get install -y git python3-venv python3-yaml curl"
+ssh $HOST "git config --global http.sslVerify false"
+ssh $HOST "echo 'insecure' > ~/.curlrc"
+ssh $HOST "mkdir -p ~/.pip && echo '[global]' > ~/.pip/pip.conf && echo 'trusted-host = pypi.org files.pythonhosted.org pypi.python.org' >> ~/.pip/pip.conf"
 
 # Clone Mission Core
 echo "   Cloning Mission Core..."
@@ -41,9 +44,13 @@ echo "   Cloning DDD..."
 ssh $HOST "rm -rf $REMOTE_MISSION/tools/ddd"
 ssh $HOST "git clone https://github.com/andrey-stepantsov/ddd $REMOTE_MISSION/tools/ddd"
 
+# OVERRIDE: Copy local bootstrap.sh to ensure fixes (pip bootstrapping) are applied
+scp tools/lib/bootstrap.sh $HOST:$REMOTE_MISSION/tools/lib/bootstrap.sh
+ssh $HOST "chmod +x $REMOTE_MISSION/tools/lib/bootstrap.sh"
+
 # Install DDD Dependencies
 echo "   Installing DDD Dependencies..."
-ssh $HOST "python3 -m pip install -r $REMOTE_MISSION/tools/ddd/requirements.txt"
+ssh $HOST "$REMOTE_MISSION/tools/lib/bootstrap.sh -m pip install -r $REMOTE_MISSION/tools/ddd/requirements.txt"
 
 # 3. Create Chaos Plan
 echo "   Planting 'Project0' Chaos Plan..."
@@ -105,7 +112,7 @@ EOF
 
 # 5. Run Chaos Generator
 echo "   Running Chaos Generator..."
-ssh $HOST "python3 $REMOTE_MISSION/tools/lib/chaos.py /tmp/chaos_plan_project0.yaml"
+ssh $HOST "/usr/bin/python3 $REMOTE_MISSION/tools/lib/chaos.py /tmp/chaos_plan_project0.yaml"
 
 # 6. Create Build Scripts & Config Switcher
 echo "   Planting Build Scripts & Helpers..."

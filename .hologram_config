@@ -1,4 +1,6 @@
 {
     "host_target": "oracle@mission-host",
-    "remote_root": "/repos/projects/project0"
+    "remote_root": "/repos/projects/project0",
+    "remote_mission_root": "~/.mission",
+    "last_context": "/repos/projects/project0"
 }

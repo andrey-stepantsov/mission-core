@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # 1. The Legacy Host ("Server")
   mission-host:
-    image: ubuntu:22.04
+    image: python:3.8-slim
     container_name: mission-host
     hostname: mission-host
     command: /usr/sbin/sshd -D
@@ -19,12 +19,13 @@ services:
     build:
       context: .
       dockerfile_inline: |
-        FROM ubuntu:22.04
-        RUN apt-get update && apt-get install -y openssh-server rsync git build-essential vim tmux python3 sudo
+        FROM python:3.8-slim
+        # Simulate missing pip environment
+        RUN pip uninstall -y pip setuptools wheel && rm -rf /usr/local/lib/python3.8/ensurepip
+        RUN apt-get update && apt-get install -y openssh-server rsync git build-essential vim tmux sudo curl
         RUN mkdir -p /var/run/sshd
         # User 'oracle' with password 'oracle'
-        RUN id -u oracle &>/dev/null || useradd -m -s /bin/bash oracle
-        RUN echo "oracle:oracle" | chpasswd
+        RUN if ! id -u oracle > /dev/null 2>&1; then useradd -m -s /bin/bash -p $(python3 -c 'import crypt; print(crypt.crypt("oracle", crypt.mksalt(crypt.METHOD_SHA512)))') oracle; fi
         RUN echo "oracle ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
         # SSH Keys setup (allow key auth)
         RUN mkdir -p /home/oracle/.ssh && chmod 700 /home/oracle/.ssh && chown oracle:oracle /home/oracle/.ssh
