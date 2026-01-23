@@ -5,10 +5,12 @@ from .commands.sync import do_pull, do_push, do_retract
 from .commands.build import do_build, do_log, do_listen, do_live, do_context, do_focus
 from .commands.run import do_run
 from .commands.misc import do_grep, do_repair_headers
+from .core.version import __version__
 
 def main():
     parser = argparse.ArgumentParser(description="Projector Agent: Manage Remote Brain Hologram")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--version", action="version", version=f"Projector v{__version__}")
+    subparsers = parser.add_subparsers(dest="command")
     
     # Init
     p_init = subparsers.add_parser("init", help="Initialize hologram")
