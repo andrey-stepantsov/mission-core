@@ -19,16 +19,15 @@ Enable precise, file-specific build and verification workflows on the remote hos
     *   **Result**: The remote `dd-daemon` (now Python-based) reloads the config dynamically and executes the new command.
     *   **Context**: If the working directory changed, `projector build` automatically restarts the daemon (logic confirmed in `build.py`).
 
-### Phase 2: Automation (Deferred)
+### Phase 2: Automation (Implemented)
 **Goal:** Streamline Phase 1 with CLI flags.
-**Planned Feature:**
--   Update `projector build` to accept `--verify="cmd"` or `--build="cmd"`.
--   The tool will automatically:
-    1.  Read current config.
-    2.  Patch it with the new command.
-    3.  Push the temporary config.
-    4.  Trigger the build.
-    5.  (Optional) Revert the config?
+**Feature:**
+-   Updated `projector build` to accept `--verify="cmd"`, `--build="cmd"`, and `--path="dir"`.
+-   The tool automatically:
+    1.  Reads current config.
+    2.  Patches it with the new command.
+    3.  Pushes the updated config to `.ddd/config.json`.
+    4.  Triggers the build.
 
 ## Verification Plan (Phase 1)
 

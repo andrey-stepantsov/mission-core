@@ -56,6 +56,9 @@ def main():
     p_build = subparsers.add_parser("build", help="Trigger remote build manually")
     p_build.add_argument("--context-from", help="Derive build context from this file path")
     p_build.add_argument("--sync", help="Synchronize specific file before building")
+    p_build.add_argument("--path", help="Override build context path (or subdirectory)")
+    p_build.add_argument("--build", help="Override build command temporarily")
+    p_build.add_argument("--verify", help="Override verify command temporarily")
     p_build.add_argument("--wait", action="store_true", help="Wait for build completion and stream logs")
     p_build.set_defaults(func=do_build)
     

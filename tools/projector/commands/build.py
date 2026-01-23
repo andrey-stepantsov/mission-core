@@ -116,7 +116,10 @@ def do_build(args):
     hologram_abs = os.path.join(project_root, HOLOGRAM_DIR)
     
     # Determine Context
-    if hasattr(args, 'context_from') and args.context_from:
+    if hasattr(args, 'path') and args.path:
+        start_path = os.path.abspath(args.path)
+        print(f"Build Context Forced to: {args.path}")
+    elif hasattr(args, 'context_from') and args.context_from:
         start_path = os.path.dirname(os.path.abspath(args.context_from))
         print(f"Build Context Derived from: {args.context_from}")
     elif hasattr(args, 'sync') and args.sync:
@@ -135,9 +138,64 @@ def do_build(args):
             do_push(PushArgs, trigger=False)
         except Exception as e:
             print(f"⚠️ Warning: Sync failed: {e}")
-
+            
     context_path = find_build_context(hologram_abs, start_path)
     
+    # Calculate Residual Path (for subdirectory execution within a context)
+    residual_path = ""
+    if context_path:
+        context_abs = os.path.join(hologram_abs, context_path)
+    else:
+        context_abs = hologram_abs
+        
+    if start_path.startswith(context_abs) and start_path != context_abs:
+        residual_path = os.path.relpath(start_path, context_abs)
+    
+    # Phase 2: Dynamic Config Patching
+    if (hasattr(args, 'build') and args.build) or (hasattr(args, 'verify') and args.verify):
+        ddd_config_path = os.path.join(context_abs, ".ddd", "config.json")
+        
+        if not os.path.exists(ddd_config_path):
+             print(f"Error: {ddd_config_path} not found. Ensure you have pulled the config first.")
+             sys.exit(1)
+             
+        try:
+             with open(ddd_config_path, 'r') as f:
+                 ddd_config = json.load(f)
+                 
+             # Ensure structure exists
+             if 'targets' not in ddd_config: ddd_config['targets'] = {}
+             if 'dev' not in ddd_config['targets']: ddd_config['targets']['dev'] = {}
+             
+             prefix = f"cd {residual_path} && " if residual_path else ""
+             
+             if args.build:
+                 if 'build' not in ddd_config['targets']['dev']: ddd_config['targets']['dev']['build'] = {}
+                 cmd = f"{prefix}{args.build}"
+                 ddd_config['targets']['dev']['build']['cmd'] = cmd
+                 print(f"🔧 Patching build command: {cmd}")
+
+             if args.verify:
+                 if 'verify' not in ddd_config['targets']['dev']: ddd_config['targets']['dev']['verify'] = {}
+                 cmd = f"{prefix}{args.verify}"
+                 ddd_config['targets']['dev']['verify']['cmd'] = cmd
+                 print(f"🔧 Patching verify command: {cmd}")
+                 
+             with open(ddd_config_path, 'w') as f:
+                 json.dump(ddd_config, f, indent=4)
+                 
+             # Push it
+             print(f"🚀 Pushing updated config...")
+             from .sync import do_push
+             class PushConfigArgs:
+                 file = ddd_config_path
+                 
+             do_push(PushConfigArgs(), trigger=False)
+             
+        except Exception as e:
+             print(f"Error updating config: {e}")
+             sys.exit(1)
+
     trigger_build(config, context_path)
     print("✅ Build triggered.")
     

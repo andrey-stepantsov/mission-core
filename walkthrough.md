@@ -73,3 +73,10 @@ Verified in `mission-sim` (with manual prerequisite installation to mimic real h
 ### C. Verification
 -   **Method**: Simulated "Phase 1" locally.
 -   **Result**: Confirmed that updating `config.json` and triggering the daemon results in the immediate execution of the new verification command.
+
+### D. Phase 2: Automation (Available)
+-   **CLI Support**: Added `--verify`, `--build`, and `--path` flags to `projector build`.
+-   **Workflow**:
+    -   `projector build --path="tests" --verify="pytest test_foo.py"`
+    -   Automatically patches `.ddd/config.json` (running `cd tests && pytest ...`), pushes it, and triggers the build.
+    -   Eliminates the need for manual "Edit -> Push -> Trigger" cycle for quick command overrides.
