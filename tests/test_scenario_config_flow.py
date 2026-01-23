@@ -24,6 +24,9 @@ CONFIG_BAK = DDD_DIR / "config.json.bak"
 FILTER_DIR = DDD_DIR / "filters"
 TEST_FILTER = FILTER_DIR / "ignore_info.py"
 
+import pytest
+
+@pytest.mark.skip(reason="Requires full agent stack and credentials")
 class TestConfigFlow(unittest.TestCase):
     def setUp(self):
         """Prepare the battlefield."""

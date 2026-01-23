@@ -91,6 +91,7 @@ def wait_for_log(sender, recipient, msg_type, content_substr=None, timeout=20):
     print(f"     [!] Timeout looking for {target}")
     return False
 
+@pytest.mark.skip(reason="Requires full agent stack and credentials")
 @pytest.mark.integration
 def test_local_smith_reply(swarm_env):
     """Verify Local Smith hears User and replies."""

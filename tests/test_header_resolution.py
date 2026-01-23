@@ -7,23 +7,13 @@ import shutil
 from unittest.mock import MagicMock, patch
 
 # Add tools/bin to path to import projector
-TOOLS_BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools/bin'))
-sys.path.append(TOOLS_BIN)
+# Add tools/ to path to import projector package
+TOOLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tools'))
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
-import importlib.machinery
-import importlib.util
-
-PROJECTOR_PATH = os.path.join(TOOLS_BIN, "projector")
-if not os.path.exists(PROJECTOR_PATH):
-    PROJECTOR_PATH = os.path.abspath(os.path.join(os.getcwd(), ".mission/tools/bin/projector"))
-
-if not os.path.exists(PROJECTOR_PATH):
-    raise FileNotFoundError(f"Cannot find projector at {PROJECTOR_PATH}")
-
-loader = importlib.machinery.SourceFileLoader("projector", PROJECTOR_PATH)
-spec = importlib.util.spec_from_loader("projector", loader)
-projector = importlib.util.module_from_spec(spec)
-loader.exec_module(projector)
+from projector.internal import compile_db
+from projector.core import config
 
 class TestHeaderResolution(unittest.TestCase):
     def setUp(self):
@@ -34,8 +24,8 @@ class TestHeaderResolution(unittest.TestCase):
         os.makedirs(self.outside_wall_dir)
         
         # Mock constants
-        projector.HOLOGRAM_DIR = "hologram"
-        projector.OUTSIDE_WALL_DIR = "outside_wall"
+        config.HOLOGRAM_DIR = "hologram"
+        config.OUTSIDE_WALL_DIR = "outside_wall"
         
         # Mock config
         self.mock_config = {
@@ -43,14 +33,14 @@ class TestHeaderResolution(unittest.TestCase):
             "remote_root": "/remote",
             "system_includes": ["/usr/include", "/opt/lib"]
         }
-        self.original_load_config = projector.load_config
-        projector.load_config = MagicMock(return_value=self.mock_config)
+        self.original_load_config = compile_db.load_config
+        compile_db.load_config = MagicMock(return_value=self.mock_config)
         
         self.cwd_patcher = patch('os.getcwd', return_value=self.test_dir)
         self.mock_getcwd = self.cwd_patcher.start()
 
     def tearDown(self):
-        projector.load_config = self.original_load_config
+        compile_db.load_config = self.original_load_config
         self.cwd_patcher.stop()
         shutil.rmtree(self.test_dir)
 
@@ -65,7 +55,7 @@ class TestHeaderResolution(unittest.TestCase):
         dependencies = []
 
         # Run
-        projector.update_local_compile_db(context, dependencies)
+        compile_db.update_local_compile_db(context, dependencies)
 
         # Verify
         db_path = os.path.join(self.hologram_dir, "compile_commands.json")
@@ -93,7 +83,7 @@ class TestHeaderResolution(unittest.TestCase):
         }
         
         # Run
-        projector.update_local_compile_db(context, [])
+        compile_db.update_local_compile_db(context, [])
         
         # Verify
         db_path = os.path.join(self.hologram_dir, "compile_commands.json")

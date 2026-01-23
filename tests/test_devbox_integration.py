@@ -17,6 +17,10 @@ class TestDevboxIntegration:
         # Assume CWD is chaos root or we can find it
         chaos_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
         
+        if os.environ.get("DEVBOX_SHELL_ENABLED"):
+             assert sys.version_info[:2] == (3, 8), f"Expected Python 3.8 inside devbox, got {sys.version}"
+             return
+
         if not os.path.exists(os.path.join(chaos_root, "devbox.json")):
              pytest.skip("devbox.json not found in chaos root")
 
@@ -31,6 +35,9 @@ class TestDevboxIntegration:
         """Checks if projector is in the PATH inside devbox."""
         chaos_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
         
+        if os.environ.get("DEVBOX_SHELL_ENABLED"):
+             pytest.skip("Skipping nested devbox invocation check")
+
         # We try to run `projector --help`
         cmd = ["devbox", "run", "--", "projector", "--help"]
         result = subprocess.run(cmd, cwd=chaos_root, capture_output=True, text=True)
@@ -42,6 +49,9 @@ class TestDevboxIntegration:
         """Checks if rsync is available inside devbox."""
         chaos_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
         
+        if os.environ.get("DEVBOX_SHELL_ENABLED"):
+             pytest.skip("Skipping nested devbox invocation check")
+
         cmd = ["devbox", "run", "--", "rsync", "--version"]
         result = subprocess.run(cmd, cwd=chaos_root, capture_output=True, text=True)
         
@@ -52,6 +62,9 @@ class TestDevboxIntegration:
         """Checks if ssh is available inside devbox."""
         chaos_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
         
+        if os.environ.get("DEVBOX_SHELL_ENABLED"):
+             pytest.skip("Skipping nested devbox invocation check")
+
         cmd = ["devbox", "run", "--", "ssh", "-V"]
         result = subprocess.run(cmd, cwd=chaos_root, capture_output=True, text=True)
         
