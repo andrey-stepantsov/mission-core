@@ -97,12 +97,26 @@ def trigger_build(config, context_rel_path=None):
     print(f"Triggering remote build at {build_req}...")
     
     req_dir = os.path.dirname(build_req)
-    try:
-         run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; mkdir -p {req_dir}"])
-    except Exception:
-         pass
+    
+    if host == 'local':
+        if not os.path.exists(req_dir):
+            os.makedirs(req_dir, exist_ok=True)
+        # Remove and Touch locally
+        try:
+             if os.path.exists(build_req):
+                 os.remove(build_req)
+             with open(build_req, 'w') as f:
+                 pass
+        except OSError as e:
+            print(f"Error triggering local build: {e}")
+            
+    else:
+        try:
+             run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; mkdir -p {req_dir}"])
+        except Exception:
+             pass
 
-    run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; rm -f {build_req} && touch {build_req}"])
+        run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; rm -f {build_req} && touch {build_req}"])
 
 def do_build(args):
     """Explicitly triggers the remote build."""

@@ -35,7 +35,10 @@ def do_run(args):
     # We cd to remote_root first
     full_remote_cmd = f"cd {remote_root} && {cmd_to_run}"
     
-    ssh_cmd = ["ssh"] + ssh_opts + [host, full_remote_cmd]
+    if host == 'local':
+        ssh_cmd = ["/bin/sh", "-c", full_remote_cmd]
+    else:
+        ssh_cmd = ["ssh"] + ssh_opts + [host, full_remote_cmd]
     
     try:
         # Check=False allows us to pass through the exit code without python raising exception

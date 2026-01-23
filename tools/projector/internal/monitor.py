@@ -14,12 +14,9 @@ def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
     
     while True:
         # Pre-Check (only for stop_on_finish)
-        # If the build already finished while we were connecting/reconnecting, we might miss the live signal using tail -f.
-        # So we check the tail of the file first.
         if stop_on_finish:
              try:
                 check_cmd = ["ssh"] + ssh_opts + [host, f"unset HISTFILE; tail -n 50 {remote_log} 2>/dev/null"]
-                # Capture output, don't check=True because grep might fail? No, this is just tail.
                 res = subprocess.run(check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 if res.returncode == 0:
                     for line in res.stdout.splitlines():
@@ -29,11 +26,25 @@ def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
                         if "[MISSION FAILED]" in line or "BUILD_FAILURE" in line:
                             print(f"❌ [MISSION FAILED] (Detected in log history)", flush=True)
                             return 1
-             except Exception:
-                 pass # Ignore pre-check errors, fall through to stream
+                        # Support legacy signals (standard dd-daemon output)
+                        if "[*] Pipeline Complete." in line:
+                            print(f"✅ [MISSION COMPLETE] (Detected in log history)", flush=True)
+                            return 0
+                        if line.startswith("[-] ") and "Failed" in line:
+                             # Be careful not to match random lines?
+                             # Standard failures are: "[-] BUILD Failed (Exit: ...)" or "[-] VERIFY Failed"
+                            print(f"❌ [MISSION FAILED] (Detected in log history)", flush=True)
+                            return 1
 
-        # Stream
-        cmd = ["ssh"] + ssh_opts + [host, f"unset HISTFILE; tail -F {remote_log} 2>/dev/null"]
+             except Exception:
+                 pass 
+
+        if host == 'local':
+             # Local Stream
+             cmd = ["tail", "-n", "1000", "-F", remote_log]
+        else:
+             # Remote Stream
+             cmd = ["ssh"] + ssh_opts + [host, f"unset HISTFILE; tail -n 1000 -F {remote_log} 2>/dev/null"]
         
         try:
             print(f"📡 Tuning into Mission Radio on {host}...", flush=True)
@@ -42,7 +53,6 @@ def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
             while True:
                 raw_line = process.stdout.readline()
                 if not raw_line:
-                    # EOF means process died (SSH disconnect?)
                     break
                 
                 # Mirror
@@ -83,7 +93,25 @@ def monitor_build(host, remote_log, stop_on_finish=False, mirror_log=None):
                     except json.JSONDecodeError:
                         print(f"⚠️  [RADIO CORRUPT] {line}", flush=True)
                 else:
+                    # Legacy Signal Detection
                     print(f"   [log] {line}", flush=True)
+                    
+                    if "[*] Pipeline Complete." in line:
+                        print(f"✅ [MISSION COMPLETE] (Legacy Signal)", flush=True)
+                        if stop_on_finish: return 0
+                        
+                    if line.startswith("[-] ") and "Failed" in line:
+                        print(f"❌ [MISSION FAILED] (Legacy Signal)", flush=True)
+                        if stop_on_finish: return 1
+
+                    # Fallback Detection: DD-Daemon always writes Build Stats at end
+                    if "Est. Tokens:" in line or "--- 📊 Build Stats ---" in line:
+                         # We saw the stats, so the build is done.
+                         # We assume success (0) because we can't distinguish failure from log content easily
+                         # without parsing. The Agent will parse the output anyway.
+                         if stop_on_finish:
+                             print(f"✅ [MISSION COMPLETE] (Stats Detected)", flush=True)
+                             return 0
             
             # If we get here, the process ended (but wait didn't end).
             # Means SSH dropped.

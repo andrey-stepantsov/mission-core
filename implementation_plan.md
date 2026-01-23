@@ -43,3 +43,25 @@ Enable precise, file-specific build and verification workflows on the remote hos
     -   Check logs: `projector log`
     -   Expect to see: `Dynamic Verification Active!` output.
 
+
+## Phase 3: Structured Diagnostics (Completed)
+**Goal:** Close the feedback loop by making build output machine-readable and actionable.
+
+### Changes Implemented
+1.  **`projector` Client Updates**:
+    -   **Local Support**: Patched `sync.py`, `build.py`, `run.py` to support `host_target: "local"` via direct execution (bypassing SSH).
+    -   **Robust Monitoring**: Updated `monitor.py` to detect "Build Stats" as completion signal, enabling support for unmodified `dd-daemon`.
+    -   **Full Log Context**: Increased tail buffer to capture complete JSON blobs.
+
+2.  **Verification**:
+    -   Created `tests/autofix_demo.py` to prove the loop.
+    -   Verified `gcc_json` filter output is parseable by the Agent.
+
+### Verification Plan
+1.  **Radio Signal Check**:
+    -   *Superseded*: Uses "Build Stats" as implicit signal. Verified `projector build --wait` exits correctly.
+2.  **Dynamic Filter Switching**:
+    -   Verified via `autofix_demo.py` which pushes `config.json` enabling `gcc_json`.
+3.  **Autofix Scenario**:
+    -   Run `python3 .mission/tests/autofix_demo.py`.
+    -   Result: **Success**. Script auto-corrected a missing semicolon.

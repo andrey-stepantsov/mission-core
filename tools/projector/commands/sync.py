@@ -298,15 +298,25 @@ def do_push(args, trigger=False):
     
     # Ensure remote directory exists
     remote_dir = os.path.dirname(remote_path)
-    if remote_dir and remote_dir != ".":
-         ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-         try:
-             run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; mkdir -p {remote_dir}"])
-         except Exception:
-             pass
+    
+    if host == 'local':
+        if remote_dir and remote_dir != ".":
+             os.makedirs(remote_dir, exist_ok=True)
+             
+        # Local Rsync
+        rsync_cmd = ["rsync", "-az", local_path, remote_path]
+        run_command(rsync_cmd)
+        
+    else:
+        if remote_dir and remote_dir != ".":
+             ssh_opts = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
+             try:
+                 run_command(["ssh"] + ssh_opts + [host, f"unset HISTFILE; mkdir -p {remote_dir}"])
+             except Exception:
+                 pass
 
-    rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", local_path, f"{host}:{remote_path}"]
-    run_command(rsync_cmd)
+        rsync_cmd = ["rsync", "-az", "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", local_path, f"{host}:{remote_path}"]
+        run_command(rsync_cmd)
     
     if trigger:
         # Lazy Import to avoid circularity
