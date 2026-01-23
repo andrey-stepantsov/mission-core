@@ -1,114 +1,16 @@
 #!/bin/bash
-# DDD-Lite: Distributed Developer Daemon (Shell Implementation)
-# Protocol v0.6.0 Compatible
-#
-# Usage: ./dd-daemon
-#
-# 1. Creates .ddd/run directory
-# 2. Loops watching for .ddd/run/build.request
-# 3. On trigger: Locks, Builds, Logs, Unlocks.
+DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Resolve paths relative to .mission/tools/bin
+# We want to use the robust Python implementation in .mission/tools/ddd/src
+BOOTSTRAP="$DIR/../ddd/bootstrap.sh"
+SCRIPT="$DIR/../ddd/src/dd-daemon.py"
 
-# Allow DDD_ROOT override (for project-specific daemons)
-if [ -z "$DDD_ROOT" ]; then
-    DDD_ROOT="${HOME}/.ddd"
+# Ensure we have the executable bit (just in case)
+if [ -f "$BOOTSTRAP" ]; then
+    chmod +x "$BOOTSTRAP"
 fi
-RUN_DIR="$DDD_ROOT/run"
-REQUEST_FILE="$RUN_DIR/build.request"
-LOCK_FILE="$RUN_DIR/ipc.lock"
-LOG_FILE="$RUN_DIR/build.log"
-CONFIG_FILE="$DDD_ROOT/config.json"
 
-# Initialize
-mkdir -p "$RUN_DIR"
-echo "DDD-Lite: Daemon started. Watching $REQUEST_FILE..."
-
-# Trap for cleanup
-cleanup() {
-    echo "DDD-Lite: Shutting down."
-    rm -f "$LOCK_FILE"
-    exit 0
-}
-trap cleanup SIGINT SIGTERM
-
-# Main Loop
-while true; do
-    if [ -f "$REQUEST_FILE" ]; then
-        echo "DDD-Lite: Build Triggered at $(date)!"
-        
-        # 1. Lock
-        touch "$LOCK_FILE"
-        
-        # 2. Consume Trigger
-        rm "$REQUEST_FILE"
-        
-        # Helper for Radio Broadcasts
-        radio_broadcast() {
-            local event=$1
-            local message=$2
-            local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            # JSON-like structure (using a simplified format compatible with shell)
-            echo "[RADIO] {\"event\": \"$event\", \"message\": \"$message\", \"timestamp\": \"$timestamp\"}" >> "$LOG_FILE"
-        }
-
-        radio_broadcast "BUILD_START" "Build triggered"
-        
-        # 3. Build (Simulated or Real)
-        {
-            echo "--- Build Start: $(date) ---"
-            if [ -f "$CONFIG_FILE" ]; then
-                # TODO: Parse config.json for actual command. for now, just cat it.
-                echo "Configuration found but ignored in Lite version."
-            fi
-            
-            # Parse config if needed (skipped in Lite)
-            
-            # Switch to Project Root if defined
-            if [ -n "$PROJECT_ROOT" ]; then
-                cd "$PROJECT_ROOT"
-            fi
-            
-            # Default action: run make if exists, else generic echo
-            SUCCESS=0
-            if [ -f "Makefile" ]; then
-                echo "Running make..."
-                if make; then
-                    SUCCESS=1
-                else
-                    SUCCESS=0
-                fi
-            else
-                echo "No build system found. Simulating build..."
-                sleep 2
-                echo "Build Success!"
-                SUCCESS=1
-            fi
-            echo "--- Build End: $(date) ---"
-        } >> "$LOG_FILE" 2>&1
-        
-        # Check success logic (Simulated for now, would be exit code of make)
-        # In this lite script, we determine success if the block above didn't exit.
-        # But we need real status.
-        # For simplicity in Lite, if we reached here, we claim success unless make failed.
-        # To capture make failure correctly, we'd need to change how we pipe.
-        # For now, we will just assume SUCCESS in Simulation unless modified.
-        # REFINEMENT: Let's trust the SUCCESS var from above? Variable scope in {} block might be tricky if piped.
-        # But here we redirected output.
-        
-        # 4. Result Broadcast
-        # Since we ran in a subshell or block redirect, variables might not persist if piped.
-        # But here valid syntax is `{ ... } >> file`. Variables inside persist if not `|`.
-        # So SUCCESS should be available.
-        
-        if [ "$SUCCESS" -eq 1 ]; then
-            radio_broadcast "BUILD_SUCCESS" "Build completed successfully."
-        else
-            radio_broadcast "BUILD_FAILURE" "Build failed."
-        fi
-
-        # 5. Unlock
-        rm -f "$LOCK_FILE"
-        echo "DDD-Lite: Build Complete."
-    fi
-    sleep 1
-done
+# Self-Bootstrap and Run
+# This upgrades the Lite shell script to the full Python Project-Local Architecture
+exec "$BOOTSTRAP" "$SCRIPT" "$@"

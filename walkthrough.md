@@ -42,3 +42,34 @@ Verified in `mission-sim` (with manual prerequisite installation to mimic real h
   --user stepants \
   --alias my-remote-dev
 ```
+
+## 4. Remote Build Architecture (v2.9.2)
+**Objective**: Enable project-specific, dynamic build/verify workflows on the remote host without modifying the daemon code.
+
+### A. Dynamic Config Protocol
+-   **Configuration as Data**: `dd-daemon` now reads `.ddd/config.json` fresh on every trigger.
+-   **Workflow**:
+    1.  **Edit**: Modify `hologram/.ddd/config.json` (e.g., set `"verify": {"cmd": "pytest test_foo.py"}`).
+    2.  **Push**: `projector push .ddd/config.json`.
+    3.  **Trigger**: `projector build`.
+-   **Schema**:
+    ```json
+    {
+      "targets": {
+        "dev": {
+          "build": { "cmd": "..." },
+          "verify": { "cmd": "..." }
+        }
+      }
+    }
+    ```
+
+### B. Daemon Upgrades
+-   **Python Implementation**: Upgraded `tools/bin/dd-daemon` to use the robust Python implementation (`tools/ddd/src/dd-daemon.py`) instead of the legacy shell script.
+    -   Leverages `watchdog` for file events.
+    -   Supports JSON parsing and Python-based plugins.
+-   **Context Awareness**: `projector build` handles subdirectory context switching by restarting the remote daemon with the correct `PROJECT_ROOT` when the working directory changes.
+
+### C. Verification
+-   **Method**: Simulated "Phase 1" locally.
+-   **Result**: Confirmed that updating `config.json` and triggering the daemon results in the immediate execution of the new verification command.
